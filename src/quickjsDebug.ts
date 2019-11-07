@@ -276,7 +276,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 
 	private _captureOutput(process: CP.ChildProcess) {
 		process.stdout.on('data', (data: string) => {
-			// this.sendEvent(new OutputEvent(data.toString(), 'stdout'));
+			this.sendEvent(new OutputEvent(data.toString(), 'stdout'));
 		});
 		process.stderr.on('data', (data: string) => {
 			this.sendEvent(new OutputEvent(data.toString(), 'stderr'));
