@@ -3,7 +3,6 @@ import { AddressInfo, Server, Socket } from 'net';
 import { basename } from 'path';
 import { InitializedEvent, Logger, logger, LoggingDebugSession, OutputEvent, Scope, Source, StackFrame, StoppedEvent, TerminatedEvent, Thread } from 'vscode-debugadapter';
 import { DebugProtocol } from 'vscode-debugprotocol';
-const { Subject } = require('await-notify');
 const path = require('path');
 const Parser = require('stream-parser');
 const Transform = require('stream').Transform;
@@ -203,10 +202,10 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		this.closeServer();
 		this._server = new Server(this.onSocket.bind(this));
 		this._server.listen(args.port || 0);
-		var port = (<AddressInfo> this._server.address()).port;
+		var port = (<AddressInfo>this._server.address()).port;
 		this.log(`QuickJS Debug port: ${port}`);
 
-		var cwd = <string> args.cwd || path.dirname(args.program);
+		var cwd = <string>args.cwd || path.dirname(args.program);
 		var env = {
 			QUICKJS_DEBUG_ADDRESS: `localhost:${port}`
 		}
@@ -230,7 +229,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		if (!args.attach) {
 			if (this._supportsRunInTerminalRequest && (this._console === 'externalTerminal' || this._console === 'integratedTerminal')) {
 
-				const termArgs : DebugProtocol.RunInTerminalRequestArguments = {
+				const termArgs: DebugProtocol.RunInTerminalRequestArguments = {
 					kind: this._console === 'integratedTerminal' ? 'integrated' : 'external',
 					title: "QuickJS Debug Console",
 					cwd,
@@ -265,8 +264,6 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 					this._terminated('target closed');
 				});
 
-				// this._processId = nodeProcess.pid;
-
 				this._captureOutput(nodeProcess);
 			}
 		}
@@ -293,9 +290,6 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 
 	}
 
-	/**
-	 * The debug session has terminated.
-	 */
 	private _terminated(reason: string): void {
 		this.log(`_terminated: ${reason}`);
 		this.closeServer();
@@ -378,7 +372,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		const thread = args.threadId;
 		const body = await this.sendThreadRequest(args.threadId, response, args);
 
-		const stackFrames = body.map(({id, name, filename, line, column} )=> {
+		const stackFrames = body.map(({ id, name, filename, line, column }) => {
 			const source = filename ? this.createSource(filename) : undefined;
 			var mappedId = id + thread;
 			this._stackFrames.set(mappedId, thread);
@@ -401,7 +395,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		}
 		args.frameId -= thread;
 		const body = await this.sendThreadRequest(thread, response, args);
-		const scopes = body.map(({name, reference, expensive} )=> {
+		const scopes = body.map(({ name, reference, expensive }) => {
 			// todo: use counter mapping
 			var mappedReference = reference + thread;
 			this._variables.set(mappedReference, thread);
@@ -423,11 +417,11 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 
 		args.variablesReference -= thread;
 		const body = await this.sendThreadRequest(thread, response, args);
-		const variables = body.map(({name, value, type, variablesReference, indexedVariables} )=> {
+		const variables = body.map(({ name, value, type, variablesReference, indexedVariables }) => {
 			// todo: use counter mapping
 			variablesReference = variablesReference ? variablesReference + thread : 0;
 			this._variables.set(variablesReference, thread);
-			return {name, value, type, variablesReference, indexedVariables};
+			return { name, value, type, variablesReference, indexedVariables };
 		});
 
 		response.body = {
@@ -446,7 +440,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		var json = JSON.stringify(envelope);
 
 		var jsonBuffer = Buffer.from(json);
-        // length prefix is 8 hex followed by newline = 012345678\n
+		// length prefix is 8 hex followed by newline = 012345678\n
 		// not efficient, but protocol is then human readable.
 		// json = 1 line json + new line
 		var messageLength = jsonBuffer.byteLength + 1;
@@ -522,6 +516,8 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		this.sendResponse(response);
 	}
 
+	pauseRequest
+
 	protected completionsRequest(response: DebugProtocol.CompletionsResponse, args: DebugProtocol.CompletionsArguments): void {
 
 		response.body = {
@@ -542,8 +538,6 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		};
 		this.sendResponse(response);
 	}
-
-	//---- helpers
 
 	private createSource(filePath: string): Source {
 		if (!fs.existsSync(filePath) && this._localRoot)
