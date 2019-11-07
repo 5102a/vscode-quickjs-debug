@@ -102,7 +102,17 @@
 							},
 							"runtimeExecutable": {
 								"type": "string",
-								"markdownDescription": "Path to qjs executable"
+								"description": "Path to qjs executable"
+							},
+							"port": {
+								"type": "number",
+								"description": "The port used by he debug extension for incoming sessions.",
+								"default": "0"
+							},
+							"attach": {
+								"type": "boolean",
+								"description": "Start a QuickJS Debug session and wait for a session to attach on the given port.",
+								"default": "false"
 							},
 							"trace": {
 								"type": "boolean",
@@ -124,11 +134,23 @@
 				"configurationSnippets": [
 					{
 						"label": "QuickJS Debug: Launch",
-						"description": "A new configuration for 'debugging' a user selected markdown file.",
+						"description": "A new configuration for launching and debugging a JavaScript file in QuickJS.",
 						"body": {
 							"type": "quickjs",
 							"request": "launch",
 							"name": "Launch QuickJS",
+							"runtimeExecutable": "/path/to/qjs",
+							"program": "^\"\\${workspaceFolder}/main.js\""
+						}
+					},
+					{
+						"label": "QuickJS Debug: Attach",
+						"description": "A new configuration for launching and waiting fpr QuickJS to attach.",
+						"body": {
+							"type": "quickjs",
+							"request": "launch",
+							"attach": true,
+							"name": "Attach QuickJS",
 							"runtimeExecutable": "/path/to/qjs",
 							"program": "^\"\\${workspaceFolder}/main.js\""
 						}

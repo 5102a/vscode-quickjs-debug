@@ -23,6 +23,10 @@ interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
 	cwd?: string;
 	/** Absolute path to the runtime executable to be used. Default is the runtime executable on the PATH. */
 	runtimeExecutable: string;
+	/** The port the debug extension listens on to accept incoming sessions. */
+	port: number;
+	/** Run the extension and wait for QuickJS to attach. */
+	attach: boolean;
 	/** Where to launch the debug target. */
 	console?: ConsoleType;
 	/** enable logging the Debug Adapter Protocol */
@@ -193,9 +197,9 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 	protected async launchRequest(response: DebugProtocol.LaunchResponse, args: LaunchRequestArguments) {
 		this.closeServer();
 		this._server = new Server(this.onSocket.bind(this));
-		this._server.listen(5555);
+		this._server.listen(args.port || 0);
 		var port = (<AddressInfo> this._server.address()).port;
-		this.log(`port: ${port}`);
+		this.log(`QuickJS Debug port: ${port}`);
 
 		var cwd = <string> args.cwd || path.dirname(args.program);
 		var env = {
@@ -218,47 +222,48 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		let qjsArgs = (args.args || []).slice();
 		qjsArgs.unshift(args.program);
 
-		if (this._supportsRunInTerminalRequest && (this._console === 'externalTerminal' || this._console === 'integratedTerminal')) {
+		if (!args.attach) {
+			if (this._supportsRunInTerminalRequest && (this._console === 'externalTerminal' || this._console === 'integratedTerminal')) {
 
-			const termArgs : DebugProtocol.RunInTerminalRequestArguments = {
-				kind: this._console === 'integratedTerminal' ? 'integrated' : 'external',
-				title: "QuickJS Debug Console",
-				cwd,
-				args: qjsArgs,
-				env,
-			};
+				const termArgs : DebugProtocol.RunInTerminalRequestArguments = {
+					kind: this._console === 'integratedTerminal' ? 'integrated' : 'external',
+					title: "QuickJS Debug Console",
+					cwd,
+					args: qjsArgs,
+					env,
+				};
 
-			this.runInTerminalRequest(termArgs, QuickJSDebugSession.RUNINTERMINAL_TIMEOUT, runResponse => {
-				if (runResponse.success) {
-					// this._attach(response, args, port, address, timeout);
-				} else {
-					this.sendErrorResponse(response, 2011, `Cannot launch debug target in terminal (${runResponse.message}).`);
-					// this._terminated('terminal error: ' + runResponse.message);
-				}
-			});
+				this.runInTerminalRequest(termArgs, QuickJSDebugSession.RUNINTERMINAL_TIMEOUT, runResponse => {
+					if (runResponse.success) {
+						// this._attach(response, args, port, address, timeout);
+					} else {
+						this.sendErrorResponse(response, 2011, `Cannot launch debug target in terminal (${runResponse.message}).`);
+						// this._terminated('terminal error: ' + runResponse.message);
+					}
+				});
+			} else {
+				const options: CP.SpawnOptions = {
+					cwd,
+					env,
+				};
 
-		} else {
-			const options: CP.SpawnOptions = {
-				cwd,
-				env,
-			};
+				const nodeProcess = CP.spawn(args.runtimeExecutable, qjsArgs, options);
+				nodeProcess.on('error', (error) => {
+					// tslint:disable-next-line:no-bitwise
+					this.sendErrorResponse(response, 2017, `Cannot launch debug target (${error.message}).`);
+					this._terminated(`failed to launch target (${error})`);
+				});
+				nodeProcess.on('exit', () => {
+					this._terminated('target exited');
+				});
+				nodeProcess.on('close', (code) => {
+					this._terminated('target closed');
+				});
 
-			const nodeProcess = CP.spawn(args.runtimeExecutable, qjsArgs, options);
-			nodeProcess.on('error', (error) => {
-				// tslint:disable-next-line:no-bitwise
-				this.sendErrorResponse(response, 2017, `Cannot launch debug target (${error.message}).`);
-				this._terminated(`failed to launch target (${error})`);
-			});
-			nodeProcess.on('exit', () => {
-				this._terminated('target exited');
-			});
-			nodeProcess.on('close', (code) => {
-				this._terminated('target closed');
-			});
+				// this._processId = nodeProcess.pid;
 
-			// this._processId = nodeProcess.pid;
-
-			this._captureOutput(nodeProcess);
+				this._captureOutput(nodeProcess);
+			}
 		}
 
 
@@ -288,6 +293,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 	 */
 	private _terminated(reason: string): void {
 		this.log(`_terminated: ${reason}`);
+		this.closeServer();
 
 		if (!this._isTerminated) {
 			this._isTerminated = true;

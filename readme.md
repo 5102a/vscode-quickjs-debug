@@ -11,7 +11,7 @@ QuickJS Debug supports *stepping*, *continue*, *breakpoints*, *evaluation*, and
 * Build the [QuickJS fork](https://github.com/koush/quickjs) from koush.
 * Specify the qjs runtime path.
 * Switch to the debug viewlet and press the gear dropdown.
-* Select the debug environment "QuickJS Debug".
+* Select the debug environment "Launch QuickJS".
 * Press the green 'play' button to start debugging.
 
 You can now step through the `test.js` file, set and hit breakpoints.
