@@ -9,7 +9,7 @@ QuickJS Debug supports *stepping*, *continue*, *breakpoints*, *evaluation*, and
 
 * Install the **QuickJS Debug** extension in VS Code.
 * Build the [QuickJS fork](https://github.com/koush/quickjs) from koush.
-* Specify the qjs runtime path.
+* Specify the qjs runtime path in [.vscode/launch.json](https://github.com/koush/vscode-quickjs-debug/blob/master/.vscode/launch.json).
 * Switch to the debug viewlet and press the gear dropdown.
 * Select the debug environment "Launch QuickJS".
 * Press the green 'play' button to start debugging.
