@@ -516,7 +516,10 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		this.sendResponse(response);
 	}
 
-	pauseRequest
+    protected async pauseRequest(response: DebugProtocol.PauseResponse, args: DebugProtocol.PauseArguments, request?: DebugProtocol.Request) {
+		response.body = await this.sendThreadRequest(args.threadId, response, args);
+		this.sendResponse(response);
+	}
 
 	protected completionsRequest(response: DebugProtocol.CompletionsResponse, args: DebugProtocol.CompletionsArguments): void {
 
