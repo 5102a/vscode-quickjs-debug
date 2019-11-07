@@ -24,6 +24,8 @@ function foo (t) {
 
 function bar() {
     foo(3);
+    console.log('asdsad');
+    console.log('asdsad2');
 }
 
 class Blub {
