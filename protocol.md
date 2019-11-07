@@ -35,9 +35,9 @@ So when viewing it in sniffer, the message would look as follows in the console 
 
 # QuickJS Debug Protocol
 
+### Message Flow
 ```
-Message Flow:
-<qjs binary Debug Server> <-----> <QuickJS Debug Adapter/Extension> <-----> VS Code
+[qjs] <-----> [QuickJS Debug Extension] <-----> [VS Code]
 ```
 
 ## Terminology
