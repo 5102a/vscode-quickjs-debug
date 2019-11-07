@@ -1,8 +1,8 @@
 {
 	"name": "quickjs-debug",
 	"displayName": "QuickJS Debug",
-	"version": "0.35.1",
-	"publisher": "andreweinand",
+	"version": "0.0.1",
+	"publisher": "koush",
 	"description": "Starter extension for developing debug adapters for VS Code.",
 	"author": {
 		"name": "Koushik Dutta",
@@ -71,7 +71,8 @@
 				"configurationAttributes": {
 					"launch": {
 						"required": [
-							"program"
+							"program",
+							"runtimeExecutable"
 						],
 						"properties": {
 							"program": {
@@ -115,7 +116,8 @@
 					{
 						"type": "quickjs",
 						"request": "launch",
-						"name": "Ask for file name",
+						"name": "Launch QuickJS",
+						"runtimeExecutable": "/path/to/qjs",
 						"program": "^\"\\${workspaceFolder}/main.js\""
 					}
 				],
@@ -126,7 +128,8 @@
 						"body": {
 							"type": "quickjs",
 							"request": "launch",
-							"name": "Ask for file name",
+							"name": "Launch QuickJS",
+							"runtimeExecutable": "/path/to/qjs",
 							"program": "^\"\\${workspaceFolder}/main.js\""
 						}
 					}
