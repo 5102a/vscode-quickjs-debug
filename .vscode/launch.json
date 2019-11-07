@@ -41,6 +41,7 @@
 			"attach": true,
 			"port": 5555,
 			"program": "${workspaceFolder}/src/tests/data/test.js",
+			"localRoot": "${workspaceFolder}/src/tests/data/",
 			"runtimeExecutable": "/Volumes/Dev/quickjs/qjs-debug"
 		}
 	],
