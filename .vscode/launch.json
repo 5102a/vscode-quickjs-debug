@@ -31,10 +31,7 @@
 			"name": "QuickJS Sample",
 			"type": "quickjs",
 			"request": "launch",
-			"files": [
-				"${workspaceFolder}/test.js",
-				"${workspaceFolder}/test2.js"
-			],
+			"program": "${workspaceFolder}/test.js",
 			"runtimeExecutable": "/Volumes/Dev/quickjs/qjs-debug"
 		}
 	],

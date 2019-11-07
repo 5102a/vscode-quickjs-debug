@@ -71,17 +71,12 @@
 				"configurationAttributes": {
 					"launch": {
 						"required": [
-							"files",
-							"runtimeExecutable"
+							"program"
 						],
 						"properties": {
-							"files": {
-								"type": "array",
-								"description": "paths to a js files.",
-								"items": {
-									"type": "string"
-								},
-								"default": ["^\"\\${workspaceFolder}/main.js\""]
+							"program": {
+								"type": "string",
+								"description": "Absolute path to a js file."
 							},
 							"console": {
 								"type": "string",
@@ -94,6 +89,7 @@
 							},
 							"args": {
 								"type": "array",
+								"description": "%launch.args.description%",
 								"items": {
 									"type": "string"
 								},
@@ -105,8 +101,7 @@
 							},
 							"runtimeExecutable": {
 								"type": "string",
-								"markdownDescription": "Path to qjs executable",
-								"default": "/path/to/qjs"
+								"markdownDescription": "Path to qjs executable"
 							},
 							"trace": {
 								"type": "boolean",
@@ -120,9 +115,9 @@
 					{
 						"type": "quickjs",
 						"request": "launch",
-						"name": "Launch QuickJS",
-						"files": ["^\"\\${workspaceFolder}/main.js\""],
-						"runtimeExecutable": "/path/to/qjs"
+						"name": "Ask for file name",
+						"program": "${workspaceFolder}/${command:AskForProgramName}",
+						"stopOnEntry": true
 					}
 				],
 				"configurationSnippets": [
@@ -132,9 +127,9 @@
 						"body": {
 							"type": "quickjs",
 							"request": "launch",
-							"name": "Launch QuickJS",
-							"files": ["^\"\\${workspaceFolder}/main.js\""],
-							"runtimeExecutable": "/path/to/qjs"
+							"name": "Ask for file name",
+							"program": "^\"\\${workspaceFolder}/\\${command:AskForProgramName}\"",
+							"stopOnEntry": true
 						}
 					}
 				]

@@ -29,3 +29,6 @@ class Blub {
         bar();
     }
 }
+
+var blub = new Blub();
+blub.jib();
