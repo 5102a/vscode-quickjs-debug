@@ -1,12 +1,12 @@
 {
-	"name": "mock-debug",
-	"displayName": "Mock Debug",
+	"name": "quickjs-debug",
+	"displayName": "QuickJS Debug",
 	"version": "0.35.1",
 	"publisher": "andreweinand",
 	"description": "Starter extension for developing debug adapters for VS Code.",
 	"author": {
-		"name": "Microsoft Corporation",
-		"email": "aweinand@microsoft.com"
+		"name": "Koushik Dutta",
+		"email": "koushd@gmail.com"
 	},
 	"license": "MIT",
 	"keywords": [
@@ -16,24 +16,23 @@
 		"vscode": "^1.33.0",
 		"node": "^10.15.1"
 	},
-	"icon": "images/mock-debug-icon.png",
+	"icon": "images/quickjs-debug-icon.png",
 	"categories": [
 		"Debuggers"
 	],
 	"private": true,
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/Microsoft/vscode-mock-debug.git"
+		"url": "https://github.com/Microsoft/vscode-quickjs-debug.git"
 	},
 	"bugs": {
-		"url": "https://github.com/Microsoft/vscode-mock-debug/issues"
+		"url": "https://github.com/Microsoft/vscode-quickjs-debug/issues"
 	},
 	"scripts": {
 		"prepublish": "tsc -p ./src",
 		"compile": "tsc -p ./src",
 		"tslint": "tslint ./src/**/*.ts",
 		"watch": "tsc -w -p ./src",
-		"test": "mocha -u tdd ./out/tests/",
 		"postinstall": "node ./node_modules/vscode/bin/install",
 		"package": "vsce package",
 		"publish": "vsce publish"
@@ -55,8 +54,7 @@
 	},
 	"main": "./out/extension",
 	"activationEvents": [
-		"onDebug",
-		"onCommand:extension.mock-debug.getProgramName"
+		"onDebug"
 	],
 	"contributes": {
 		"breakpoints": [
@@ -66,8 +64,8 @@
 		],
 		"debuggers": [
 			{
-				"type": "mock",
-				"label": "Mock Debug",
+				"type": "quickjs",
+				"label": "QuickJS Debug",
 				"program": "./out/debugAdapter.js",
 				"runtime": "node",
 				"configurationAttributes": {
@@ -105,11 +103,6 @@
 								"type": "string",
 								"markdownDescription": "Path to qjs executable"
 							},
-							"stopOnEntry": {
-								"type": "boolean",
-								"description": "Automatically stop after launch.",
-								"default": true
-							},
 							"trace": {
 								"type": "boolean",
 								"description": "Enable logging of the Debug Adapter Protocol.",
@@ -120,7 +113,7 @@
 				},
 				"initialConfigurations": [
 					{
-						"type": "mock",
+						"type": "quickjs",
 						"request": "launch",
 						"name": "Ask for file name",
 						"program": "${workspaceFolder}/${command:AskForProgramName}",
@@ -129,20 +122,17 @@
 				],
 				"configurationSnippets": [
 					{
-						"label": "Mock Debug: Launch",
+						"label": "QuickJS Debug: Launch",
 						"description": "A new configuration for 'debugging' a user selected markdown file.",
 						"body": {
-							"type": "mock",
+							"type": "quickjs",
 							"request": "launch",
 							"name": "Ask for file name",
 							"program": "^\"\\${workspaceFolder}/\\${command:AskForProgramName}\"",
 							"stopOnEntry": true
 						}
 					}
-				],
-				"variables": {
-					"AskForProgramName": "extension.mock-debug.getProgramName"
-				}
+				]
 			}
 		]
 	}

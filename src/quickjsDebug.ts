@@ -1,7 +1,3 @@
-/*---------------------------------------------------------
- * Copyright (C) Microsoft Corporation. All rights reserved.
- *--------------------------------------------------------*/
-
 import * as CP from 'child_process';
 import { AddressInfo, Server, Socket } from 'net';
 import { basename } from 'path';
@@ -13,9 +9,9 @@ const Parser = require('stream-parser');
 const Transform = require('stream').Transform;
 
 /**
- * This interface describes the mock-debug specific launch attributes
+ * This interface describes the quickjs-debug specific launch attributes
  * (which are not part of the Debug Adapter Protocol).
- * The schema for these attributes lives in the package.json of the mock-debug extension.
+ * The schema for these attributes lives in the package.json of the quickjs-debug extension.
  * The interface should always match this schema.
  */
 interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
@@ -29,9 +25,6 @@ interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
 	runtimeExecutable: string;
 	/** Where to launch the debug target. */
 	console?: ConsoleType;
-
-	/** Automatically stop target after launch. If not specified, target does not stop. */
-	stopOnEntry?: boolean;
 	/** enable logging the Debug Adapter Protocol */
 	trace?: boolean;
 }
@@ -57,7 +50,7 @@ Parser(MessageParser.prototype);
 
 type ConsoleType = 'internalConsole' | 'integratedTerminal' | 'externalTerminal';
 
-export class MockDebugSession extends LoggingDebugSession {
+export class QuickJSDebugSession extends LoggingDebugSession {
 	private static RUNINTERMINAL_TIMEOUT = 5000;
 
 	private _configurationDone = new Subject();
@@ -77,7 +70,7 @@ export class MockDebugSession extends LoggingDebugSession {
 	 * We configure the default implementation of a debug adapter here.
 	 */
 	public constructor() {
-		super("mock-debug.txt");
+		super("quickjs-debug.txt");
 
 		// this debugger uses zero-based lines and columns
 		this.setDebuggerLinesStartAt1(false);
@@ -278,7 +271,7 @@ export class MockDebugSession extends LoggingDebugSession {
 				env,
 			};
 
-			this.runInTerminalRequest(termArgs, MockDebugSession.RUNINTERMINAL_TIMEOUT, runResponse => {
+			this.runInTerminalRequest(termArgs, QuickJSDebugSession.RUNINTERMINAL_TIMEOUT, runResponse => {
 				if (runResponse.success) {
 					// this._attach(response, args, port, address, timeout);
 				} else {
@@ -513,6 +506,6 @@ export class MockDebugSession extends LoggingDebugSession {
 	//---- helpers
 
 	private createSource(filePath: string): Source {
-		return new Source(basename(filePath), this.convertDebuggerPathToClient(filePath), undefined, undefined, 'mock-adapter-data');
+		return new Source(basename(filePath), this.convertDebuggerPathToClient(filePath));
 	}
 }

@@ -2,6 +2,6 @@
  * Copyright (C) Microsoft Corporation. All rights reserved.
  *--------------------------------------------------------*/
 
- import { MockDebugSession } from './mockDebug';
+ import { QuickJSDebugSession } from './quickjsDebug';
 
- MockDebugSession.run(MockDebugSession);
+ QuickJSDebugSession.run(QuickJSDebugSession);

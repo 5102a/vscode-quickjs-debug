@@ -6,7 +6,7 @@
 
 import * as vscode from 'vscode';
 import { WorkspaceFolder, DebugConfiguration, ProviderResult, CancellationToken } from 'vscode';
-import { MockDebugSession } from './mockDebug';
+import { QuickJSDebugSession } from './quickjsDebug';
 import * as Net from 'net';
 
 /*
@@ -17,27 +17,19 @@ import * as Net from 'net';
 const EMBED_DEBUG_ADAPTER = true;
 
 export function activate(context: vscode.ExtensionContext) {
-
-	context.subscriptions.push(vscode.commands.registerCommand('extension.mock-debug.getProgramName', config => {
-		return vscode.window.showInputBox({
-			placeHolder: "Please enter the name of a markdown file in the workspace folder",
-			value: "readme.md"
-		});
-	}));
-
-	// register a configuration provider for 'mock' debug type
-	const provider = new MockConfigurationProvider();
-	context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider('mock', provider));
+	// register a configuration provider for 'quickjs' debug type
+	const provider = new QuickJSConfigurationProvider();
+	context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider('quickjs', provider));
 
 	if (EMBED_DEBUG_ADAPTER) {
 		// The following use of a DebugAdapter factory shows how to run the debug adapter inside the extension host (and not as a separate process).
-		const factory = new MockDebugAdapterDescriptorFactory();
-		context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('mock', factory));
+		const factory = new QuickJSDebugAdapterDescriptorFactory();
+		context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('quickjs', factory));
 		context.subscriptions.push(factory);
 	} else {
 		// The following use of a DebugAdapter factory shows how to control what debug adapter executable is used.
 		// Since the code implements the default behavior, it is absolutely not neccessary and we show it here only for educational purpose.
-		context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('mock', {
+		context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('quickjs', {
 			createDebugAdapterDescriptor: (session: vscode.DebugSession, executable: vscode.DebugAdapterExecutable | undefined) => {
 				// param "executable" contains the executable optionally specified in the package.json (if any)
 
@@ -67,7 +59,7 @@ export function deactivate() {
 }
 
 
-class MockConfigurationProvider implements vscode.DebugConfigurationProvider {
+class QuickJSConfigurationProvider implements vscode.DebugConfigurationProvider {
 
 	/**
 	 * Massage a debug configuration just before a debug session is being launched,
@@ -79,7 +71,7 @@ class MockConfigurationProvider implements vscode.DebugConfigurationProvider {
 		if (!config.type && !config.request && !config.name) {
 			const editor = vscode.window.activeTextEditor;
 			if (editor && editor.document.languageId === 'markdown') {
-				config.type = 'mock';
+				config.type = 'quickjs';
 				config.name = 'Launch';
 				config.request = 'launch';
 				config.program = '${file}';
@@ -97,7 +89,7 @@ class MockConfigurationProvider implements vscode.DebugConfigurationProvider {
 	}
 }
 
-class MockDebugAdapterDescriptorFactory implements vscode.DebugAdapterDescriptorFactory {
+class QuickJSDebugAdapterDescriptorFactory implements vscode.DebugAdapterDescriptorFactory {
 
 	private server?: Net.Server;
 
@@ -106,7 +98,7 @@ class MockDebugAdapterDescriptorFactory implements vscode.DebugAdapterDescriptor
 		if (!this.server) {
 			// start listening on a random port
 			this.server = Net.createServer(socket => {
-				const session = new MockDebugSession();
+				const session = new QuickJSDebugSession();
 				session.setRunAsServer(true);
 				session.start(<NodeJS.ReadableStream>socket, socket);
 			}).listen(0);
