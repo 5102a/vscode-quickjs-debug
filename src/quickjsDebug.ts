@@ -43,11 +43,11 @@ interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
 class MessageParser extends Transform {
 	constructor() {
 		super();
-		this._bytes(4, this.onLength);
+		this._bytes(9, this.onLength);
 	}
 
 	private onLength(buffer: Buffer) {
-		var length = buffer.readUInt32BE(0);
+		var length = parseInt(buffer.toString(), 16);
 		this.emit('length', length);
 		this._bytes(length, this.onMessage);
 	}
@@ -55,7 +55,7 @@ class MessageParser extends Transform {
 	private onMessage(buffer: Buffer) {
 		var json = JSON.parse(buffer.toString());
 		this.emit('message', json);
-		this._bytes(4, this.onLength);
+		this._bytes(9, this.onLength);
 	}
 }
 Parser(MessageParser.prototype);
@@ -446,9 +446,15 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		var json = JSON.stringify(envelope);
 
 		var jsonBuffer = Buffer.from(json);
-		var lengthBuffer = Buffer.alloc(4);
-		lengthBuffer.writeUInt32BE(jsonBuffer.byteLength, 0);
-		var buffer = Buffer.concat([lengthBuffer, jsonBuffer]);
+        // length prefix is 8 hex followed by newline = 012345678\n
+		// not efficient, but protocol is then human readable.
+		// json = 1 line json + new line
+		var messageLength = jsonBuffer.byteLength + 1;
+		var length = '00000000' + messageLength.toString(16) + '\n';
+		length = length.substr(length.length - 9);
+		var lengthBuffer = Buffer.from(length);
+		var newline = Buffer.from('\n');
+		var buffer = Buffer.concat([lengthBuffer, jsonBuffer, newline]);
 		socket.write(buffer);
 	}
 
