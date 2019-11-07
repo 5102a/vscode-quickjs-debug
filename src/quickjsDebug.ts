@@ -7,6 +7,7 @@ const { Subject } = require('await-notify');
 const path = require('path');
 const Parser = require('stream-parser');
 const Transform = require('stream').Transform;
+const fs = require('fs');
 
 /**
  * This interface describes the quickjs-debug specific launch attributes
@@ -27,6 +28,7 @@ interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
 	port: number;
 	/** Run the extension and wait for QuickJS to attach. */
 	attach: boolean;
+	localRoot: string;
 	/** Where to launch the debug target. */
 	console?: ConsoleType;
 	/** enable logging the Debug Adapter Protocol */
@@ -78,6 +80,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 	private _stopOnException = false;
 	private _stackFrames = new Map<number, number>();
 	private _variables = new Map<number, number>();
+	private _localRoot: string;
 
 	/**
 	 * Creates a new debug adapter that is used for one debug session.
@@ -195,6 +198,8 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 	}
 
 	protected async launchRequest(response: DebugProtocol.LaunchResponse, args: LaunchRequestArguments) {
+		this._localRoot = args.localRoot;
+
 		this.closeServer();
 		this._server = new Server(this.onSocket.bind(this));
 		this._server.listen(args.port || 0);
@@ -314,6 +319,8 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 	}
 
 	private sendBreakpointMessage(thread: number, path: string, breakpoints?: DebugProtocol.SourceBreakpoint[]) {
+		if (this._localRoot && path.startsWith(this._localRoot))
+			path = path.replace(this._localRoot, '')
 		var envelope = {
 			type: 'breakpoints',
 			breakpoints: {
@@ -533,6 +540,8 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 	//---- helpers
 
 	private createSource(filePath: string): Source {
+		if (!fs.existsSync(filePath) && this._localRoot)
+			filePath = filePath = path.join(this._localRoot, filePath);
 		return new Source(basename(filePath), this.convertDebuggerPathToClient(filePath));
 	}
 }

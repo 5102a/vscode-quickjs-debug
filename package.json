@@ -114,6 +114,14 @@
 								"description": "Start a QuickJS Debug session and wait for a session to attach on the given port.",
 								"default": "false"
 							},
+                            "localRoot": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "description": "The local source root used for unqualified files.",
+								"default": "${workspaceFolder}/"
+							},
 							"trace": {
 								"type": "boolean",
 								"description": "Enable logging of the Debug Adapter Protocol.",
@@ -140,7 +148,8 @@
 							"request": "launch",
 							"name": "Launch QuickJS",
 							"runtimeExecutable": "/path/to/qjs",
-							"program": "^\"\\${workspaceFolder}/main.js\""
+							"program": "^\"\\${workspaceFolder}/main.js\"",
+							"localRoot": "^\"\\${workspaceFolder}/\""
 						}
 					},
 					{
@@ -152,7 +161,8 @@
 							"attach": true,
 							"name": "Attach QuickJS",
 							"runtimeExecutable": "/path/to/qjs",
-							"program": "^\"\\${workspaceFolder}/main.js\""
+							"program": "^\"\\${workspaceFolder}/main.js\"",
+							"localRoot": "^\"\\${workspaceFolder}/\""
 						}
 					}
 				]
