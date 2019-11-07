@@ -56,17 +56,20 @@ Parser(MessageParser.prototype);
 
 type ConsoleType = 'internalConsole' | 'integratedTerminal' | 'externalTerminal';
 
+interface PendingResponse {
+	resolve: Function;
+	reject: Function;
+}
+
 export class QuickJSDebugSession extends LoggingDebugSession {
 	private static RUNINTERMINAL_TIMEOUT = 5000;
-
-	private _configurationDone = new Subject();
 
 	private _server?: Server;
 	private _supportsRunInTerminalRequest = false;
 	private _console: ConsoleType = 'internalConsole';
 	private _isTerminated: boolean;
 	private _threads = new Map<number, Socket>();
-	private _requests = new Map<number, DebugProtocol.Response>();
+	private _requests = new Map<number, PendingResponse>();
 	private _breakpoints = new Map<string, DebugProtocol.SourceBreakpoint[]>();
 	private _stopOnException = false;
 	private _stackFrames = new Map<number, number>();
@@ -97,9 +100,6 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		// build and return the capabilities of this debug adapter:
 		response.body = response.body || {};
 
-		// the adapter implements the configurationDoneRequest.
-		// response.body.supportsConfigurationDoneRequest = true;
-
 		// make VS Code to use 'evaluate' when hovering over source
 		response.body.supportsEvaluateForHovers = true;
 		response.body.exceptionBreakpointFilters = [{
@@ -124,21 +124,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 
 		this.sendResponse(response);
 
-		// since this debug adapter can accept configuration requests like 'setBreakpoint' at any time,
-		// we request them early by sending an 'initializeRequest' to the frontend.
-		// The frontend will end the configuration sequence by calling 'configurationDone' request.
 		this.sendEvent(new InitializedEvent());
-	}
-
-	/**
-	 * Called at the end of the configuration sequence.
-	 * Indicates that all breakpoints etc. have been sent to the DA and that the 'launch' can start.
-	 */
-	protected configurationDoneRequest(response: DebugProtocol.ConfigurationDoneResponse, args: DebugProtocol.ConfigurationDoneArguments): void {
-		super.configurationDoneRequest(response, args);
-
-		// notify the launchRequest that configuration has finished
-		this._configurationDone.notify();
 	}
 
 	private handleEvent(thread: number, event: any) {
@@ -150,65 +136,18 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		}
 	}
 
-	private handleResponse(thread: number, json: any) {
+	private handleResponse(json: any) {
 		var request_seq: number = json.request_seq;
-		var response = this._requests.get(request_seq);
-		if (!response) {
+		var pending = this._requests.get(request_seq);
+		if (!pending) {
 			this.log(`request not found: ${request_seq}`)
 			return;
 		}
 		this._requests.delete(request_seq);
-
-		var body = json.body;
-		if (response.command === 'stackTrace') {
-			const stackFrames = body.map(({id, name, filename, line, column} )=> {
-				const source = filename ? this.createSource(filename) : undefined;
-				var mappedId = id + thread;
-				this._stackFrames.set(mappedId, thread);
-				return new StackFrame(mappedId, name, source, line, column);
-			});
-			const totalFrames = json.body.length;
-			body = {
-				stackFrames,
-				totalFrames,
-			}
-		}
-		else if (response.command == 'scopes') {
-			const scopes = body.map(({name, reference, expensive} )=> {
-				// todo: use counter mapping
-				var mappedReference = reference + thread;
-				this._variables.set(mappedReference, thread);
-				return new Scope(name, mappedReference, expensive);
-			});
-
-			body = {
-				scopes,
-			}
-		}
-		else if (response.command == 'variables') {
-			const variables = body.map(({name, value, type, variablesReference, indexedVariables} )=> {
-				// todo: use counter mapping
-				variablesReference = variablesReference ? variablesReference + thread : 0;
-				this._variables.set(variablesReference, thread);
-				return {name, value, type, variablesReference, indexedVariables};
-			});
-
-			body = {
-				variables,
-			}
-		}
-		else if (response.command === 'evaluate') {
-			let variablesReference = body.variablesReference;
-			variablesReference = variablesReference ? variablesReference + thread : 0;
-			this._variables.set(variablesReference, thread);
-			body.variablesReference = variablesReference;
-		}
-
-		response.body = body;
 		if (json.error)
-			this.sendErrorResponse(response, json.error);
+			pending.reject(new Error(json.error));
 		else
-			this.sendResponse(response);
+			pending.resolve(json.body);
 	}
 
 	private newSession(thread: number) {
@@ -236,7 +175,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 				this.handleEvent(thread, json.event);
 			}
 			else if (json.type === 'response') {
-				this.handleResponse(thread, json);
+				this.handleResponse(json);
 			}
 			else {
 				this.log(`unknown message ${json.type}`);
@@ -299,43 +238,32 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 			});
 
 		} else {
-			// this._sendLaunchCommandToConsole(launchArgs);
+			const options: CP.SpawnOptions = {
+				cwd,
+				env,
+			};
 
-			// const options: CP.SpawnOptions = {
-			// 	cwd,
-			// 	env,
-			// };
+			const nodeProcess = CP.spawn(args.runtimeExecutable, qjsArgs, options);
+			nodeProcess.on('error', (error) => {
+				// tslint:disable-next-line:no-bitwise
+				this.sendErrorResponse(response, 2017, `Cannot launch debug target (${error.message}).`);
+				this._terminated(`failed to launch target (${error})`);
+			});
+			nodeProcess.on('exit', () => {
+				this._terminated('target exited');
+			});
+			nodeProcess.on('close', (code) => {
+				this._terminated('target closed');
+			});
 
-			// const nodeProcess = CP.spawn(args.runtimeExecutable, qjsArgs, options);
-			// nodeProcess.on('error', (error) => {
-			// 	// tslint:disable-next-line:no-bitwise
-			// 	this.sendErrorResponse(response, 2017, `Cannot launch debug target (${error.message}).`);
-			// 	this._terminated(`failed to launch target (${error})`);
-			// });
-			// nodeProcess.on('exit', () => {
-			// 	this._terminated('target exited');
-			// });
-			// nodeProcess.on('close', (code) => {
-			// 	this._terminated('target closed');
-			// });
+			// this._processId = nodeProcess.pid;
 
-			// // this._processId = nodeProcess.pid;
-
-			// this._captureOutput(nodeProcess);
-
-			// if (this._noDebug) {
-			// 	this.sendResponse(response);
-			// } else {
-			// 	this._attach(response, args, port, address, timeout);
-			// }
+			this._captureOutput(nodeProcess);
 		}
 
 
 		// make sure to 'Stop' the buffered logging if 'trace' is not set
 		logger.setup(args.trace ? Logger.LogLevel.Verbose : Logger.LogLevel.Stop, false);
-
-		// wait until configuration has finished (and configurationDoneRequest has been called)
-		await this._configurationDone.wait(1000);
 
 		this.sendResponse(response);
 	}
@@ -391,6 +319,9 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 	}
 
 	protected setExceptionBreakPointsRequest(response: DebugProtocol.SetExceptionBreakpointsResponse, args: DebugProtocol.SetExceptionBreakpointsArguments, request?: DebugProtocol.Request) {
+		// ??
+		this.sendResponse(response);
+
 		this._stopOnException = args.filters.length > 0;
 
 		for (var thread of this._threads.keys()) {
@@ -430,18 +361,44 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		this.sendResponse(response);
 	}
 
-	protected stackTraceRequest(response: DebugProtocol.StackTraceResponse, args: DebugProtocol.StackTraceArguments): void {
-		this.sendThreadRequest(args.threadId, response, args);
+	protected async stackTraceRequest(response: DebugProtocol.StackTraceResponse, args: DebugProtocol.StackTraceArguments) {
+		const thread = args.threadId;
+		const body = await this.sendThreadRequest(args.threadId, response, args);
+
+		const stackFrames = body.map(({id, name, filename, line, column} )=> {
+			const source = filename ? this.createSource(filename) : undefined;
+			var mappedId = id + thread;
+			this._stackFrames.set(mappedId, thread);
+			return new StackFrame(mappedId, name, source, line, column);
+		});
+		const totalFrames = body.length;
+
+		response.body = {
+			stackFrames,
+			totalFrames,
+		};
+		this.sendResponse(response);
 	}
 
-	protected scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments): void {
-		var thread = this._stackFrames.get(args.frameId);
+	protected async scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments) {
+		const thread = this._stackFrames.get(args.frameId);
 		if (!thread) {
 			this.sendErrorResponse(response, 2030, 'scopesRequest: thread not found');
 			return;
 		}
 		args.frameId -= thread;
-		this.sendThreadRequest(thread, response, args);
+		const body = await this.sendThreadRequest(thread, response, args);
+		const scopes = body.map(({name, reference, expensive} )=> {
+			// todo: use counter mapping
+			var mappedReference = reference + thread;
+			this._variables.set(mappedReference, thread);
+			return new Scope(name, mappedReference, expensive);
+		});
+
+		response.body = {
+			scopes,
+		};
+		this.sendResponse(response);
 	}
 
 	protected async variablesRequest(response: DebugProtocol.VariablesResponse, args: DebugProtocol.VariablesArguments, request?: DebugProtocol.Request) {
@@ -452,7 +409,18 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		}
 
 		args.variablesReference -= thread;
-		this.sendThreadRequest(thread, response, args);
+		const body = await this.sendThreadRequest(thread, response, args);
+		const variables = body.map(({name, value, type, variablesReference, indexedVariables} )=> {
+			// todo: use counter mapping
+			variablesReference = variablesReference ? variablesReference + thread : 0;
+			this._variables.set(variablesReference, thread);
+			return {name, value, type, variablesReference, indexedVariables};
+		});
+
+		response.body = {
+			variables,
+		}
+		this.sendResponse(response);
 	}
 
 	private sendThreadMessage(thread: number, envelope: any) {
@@ -471,40 +439,49 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		socket.write(buffer);
 	}
 
-	private sendThreadRequest(thread: number, response: DebugProtocol.Response, args: any) {
-		var request_seq = response.request_seq;
-		// todo: don't actually need to cache this. can send across wire.
-		this._requests.set(request_seq, response);
+	private sendThreadRequest(thread: number, response: DebugProtocol.Response, args: any): Promise<any> {
+		return new Promise((resolve, reject) => {
+			var request_seq = response.request_seq;
+			// todo: don't actually need to cache this. can send across wire.
+			this._requests.set(request_seq, {
+				resolve,
+				reject,
+			});
 
-		var envelope = {
-			type: 'request',
-			request: {
-				request_seq,
-				command: response.command,
-				args,
-			}
-		};
+			var envelope = {
+				type: 'request',
+				request: {
+					request_seq,
+					command: response.command,
+					args,
+				}
+			};
 
-		this.sendThreadMessage(thread, envelope);
+			this.sendThreadMessage(thread, envelope);
+		});
 	}
 
-	protected continueRequest(response: DebugProtocol.ContinueResponse, args: DebugProtocol.ContinueArguments): void {
-		this.sendThreadRequest(args.threadId, response, args);
+	protected async continueRequest(response: DebugProtocol.ContinueResponse, args: DebugProtocol.ContinueArguments) {
+		response.body = await this.sendThreadRequest(args.threadId, response, args);
+		this.sendResponse(response);
 	}
 
-	protected nextRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments): void {
-		this.sendThreadRequest(args.threadId, response, args);
+	protected async nextRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments) {
+		response.body = await this.sendThreadRequest(args.threadId, response, args);
+		this.sendResponse(response);
 	}
 
-	protected stepInRequest(response: DebugProtocol.StepInResponse, args: DebugProtocol.StepInArguments, request?: DebugProtocol.Request) {
-		this.sendThreadRequest(args.threadId, response, args);
+	protected async stepInRequest(response: DebugProtocol.StepInResponse, args: DebugProtocol.StepInArguments, request?: DebugProtocol.Request) {
+		response.body = await this.sendThreadRequest(args.threadId, response, args);
+		this.sendResponse(response);
 	}
 
-	protected stepOutRequest(response: DebugProtocol.StepOutResponse, args: DebugProtocol.StepOutArguments, request?: DebugProtocol.Request) {
-		this.sendThreadRequest(args.threadId, response, args);
+	protected async stepOutRequest(response: DebugProtocol.StepOutResponse, args: DebugProtocol.StepOutArguments, request?: DebugProtocol.Request) {
+		response.body = await this.sendThreadRequest(args.threadId, response, args);
+		this.sendResponse(response);
 	}
 
-	protected evaluateRequest(response: DebugProtocol.EvaluateResponse, args: DebugProtocol.EvaluateArguments): void {
+	protected async evaluateRequest(response: DebugProtocol.EvaluateResponse, args: DebugProtocol.EvaluateArguments) {
 		if (!args.frameId) {
 			this.sendErrorResponse(response, 2030, 'scopesRequest: frameId not specified');
 			return;
@@ -516,7 +493,14 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		}
 		args.frameId -= thread;
 
-		this.sendThreadRequest(thread, response, args);
+		const body = await this.sendThreadRequest(thread, response, args);
+		let variablesReference = body.variablesReference;
+		variablesReference = variablesReference ? variablesReference + thread : 0;
+		this._variables.set(variablesReference, thread);
+		body.variablesReference = variablesReference;
+
+		response.body = await this.sendThreadRequest(thread, response, args);
+		this.sendResponse(response);
 	}
 
 	protected completionsRequest(response: DebugProtocol.CompletionsResponse, args: DebugProtocol.CompletionsArguments): void {

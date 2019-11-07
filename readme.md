@@ -14,7 +14,7 @@ QuickJS Debug supports *stepping*, *continue*, *breakpoints*, *evaluation*, and
 * Select the debug environment "QuickJS Debug".
 * Press the green 'play' button to start debugging.
 
-You can now 'step through' the `test.js` file, set and hit breakpoints, and run into exceptions (if the word exception appears in a line).
+You can now step through the `test.js` file, set and hit breakpoints.
 
 ![QuickJS Debug](images/quickjs-debug-demo.png)
 
