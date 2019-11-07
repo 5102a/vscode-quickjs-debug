@@ -28,9 +28,18 @@
 			]
 		},
 		{
-			"name": "QuickJS Debug Sample",
+			"name": "Launch QuickJS",
 			"type": "quickjs",
 			"request": "launch",
+			"program": "${workspaceFolder}/src/tests/data/test.js",
+			"runtimeExecutable": "/Volumes/Dev/quickjs/qjs-debug"
+		},
+		{
+			"name": "Attach QuickJS",
+			"type": "quickjs",
+			"request": "launch",
+			"attach": true,
+			"port": 5555,
 			"program": "${workspaceFolder}/src/tests/data/test.js",
 			"runtimeExecutable": "/Volumes/Dev/quickjs/qjs-debug"
 		}
