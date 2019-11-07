@@ -68,6 +68,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 	private _threads = new Map<number, Socket>();
 	private _requests = new Map<number, DebugProtocol.Response>();
 	private _breakpoints = new Map<string, DebugProtocol.SourceBreakpoint[]>();
+	private _stopOnException = false;
 	private _stackFrames = new Map<number, number>();
 	private _variables = new Map<number, number>();
 
@@ -101,6 +102,10 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 
 		// make VS Code to use 'evaluate' when hovering over source
 		response.body.supportsEvaluateForHovers = true;
+		response.body.exceptionBreakpointFilters = [{
+			label: "All Exceptions",
+			filter: "exceptions",
+		}]
 
 		// make VS Code to support data breakpoints
 		// response.body.supportsDataBreakpoints = true;
@@ -210,6 +215,10 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		this._breakpoints.forEach((breakpoints, path) => {
 			this.sendBreakpointMessage(thread, path, breakpoints);
 		});
+		this.sendThreadMessage(thread, {
+			type: 'stopOnException',
+			stopOnException: this._stopOnException,
+		})
 	}
 
 	private onSocket(socket: Socket) {
@@ -379,6 +388,17 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 			}
 		};
 		this.sendThreadMessage(thread, envelope);
+	}
+
+	protected setExceptionBreakPointsRequest(response: DebugProtocol.SetExceptionBreakpointsResponse, args: DebugProtocol.SetExceptionBreakpointsArguments, request?: DebugProtocol.Request) {
+		this._stopOnException = args.filters.length > 0;
+
+		for (var thread of this._threads.keys()) {
+			this.sendThreadMessage(thread, {
+				type: 'stopOnException',
+				stopOnException: this._stopOnException,
+			})
+		}
 	}
 
 	protected setBreakPointsRequest(response: DebugProtocol.SetBreakpointsResponse, args: DebugProtocol.SetBreakpointsArguments): void {
