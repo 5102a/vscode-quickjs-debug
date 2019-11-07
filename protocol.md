@@ -42,7 +42,7 @@ So when viewing it in sniffer, the message would look as follows in the console 
 
 ## Terminology
 * Debug Server: the qjs runtime and debugger that handles debugging requests.
-* Debug Adapter: the QuickJS Debug VS Code extension that communicates with the debug server.
+* Debug Adapter: the QuickJS Debug VS Code extension that handles communication with the debug server on the behalf of VSCode.
 
 VS Code [debug protocol messages](https://github.com/microsoft/vscode/blob/master/src/vs/workbench/contrib/debug/common/debugProtocol.d.ts) delivered to the extension are basically sent as-is across the wire to the QuickJS debugger runtime.
 
