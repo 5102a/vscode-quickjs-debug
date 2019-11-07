@@ -25,7 +25,12 @@ function foo (t) {
 function bar() {
     foo(3);
     console.log('asdsad');
-    console.log('asdsad2');
+    console.log('about to throw!');
+    try {
+        throw new Error('whoops');
+    }
+    catch (e) {
+    }
 }
 
 class Blub {
