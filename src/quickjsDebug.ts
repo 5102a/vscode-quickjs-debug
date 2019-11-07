@@ -29,6 +29,11 @@ interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
 	trace?: boolean;
 }
 
+/**
+ * Messages from the qjs binary are in big endian length prefix json payloads.
+ * The protocol is roughly just the JSON stringification of the requests.
+ * Responses are intercepted to translate references into thread scoped references.
+ */
 class MessageParser extends Transform {
 	constructor() {
 		super();
@@ -37,6 +42,7 @@ class MessageParser extends Transform {
 
 	private onLength(buffer: Buffer) {
 		var length = buffer.readUInt32BE(0);
+		this.emit('length', length);
 		this._bytes(length, this.onMessage);
 	}
 
@@ -95,9 +101,6 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 
 		// make VS Code to use 'evaluate' when hovering over source
 		response.body.supportsEvaluateForHovers = true;
-
-		// make VS Code to show a 'step back' button
-		// response.body.supportsStepBack = true;
 
 		// make VS Code to support data breakpoints
 		// response.body.supportsDataBreakpoints = true;
@@ -188,6 +191,12 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 			body = {
 				variables,
 			}
+		}
+		else if (response.command === 'evaluate') {
+			let variablesReference = body.variablesReference;
+			variablesReference = variablesReference ? variablesReference + thread : 0;
+			this._variables.set(variablesReference, thread);
+			body.variablesReference = variablesReference;
 		}
 
 		response.body = body;
@@ -464,6 +473,14 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 	}
 
 	protected nextRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments): void {
+		this.sendThreadRequest(args.threadId, response, args);
+	}
+
+	protected stepInRequest(response: DebugProtocol.StepInResponse, args: DebugProtocol.StepInArguments, request?: DebugProtocol.Request) {
+		this.sendThreadRequest(args.threadId, response, args);
+	}
+
+	protected stepOutRequest(response: DebugProtocol.StepOutResponse, args: DebugProtocol.StepOutArguments, request?: DebugProtocol.Request) {
 		this.sendThreadRequest(args.threadId, response, args);
 	}
 

@@ -23,10 +23,10 @@
 	"private": true,
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/Microsoft/vscode-quickjs-debug.git"
+		"url": "https://github.com/koush/vscode-quickjs-debug.git"
 	},
 	"bugs": {
-		"url": "https://github.com/Microsoft/vscode-quickjs-debug/issues"
+		"url": "https://github.com/koush/vscode-quickjs-debug/issues"
 	},
 	"scripts": {
 		"prepublish": "tsc -p ./src",
@@ -76,7 +76,8 @@
 						"properties": {
 							"program": {
 								"type": "string",
-								"description": "Absolute path to a js file."
+								"description": "Absolute path to a js file.",
+								"default": "^\"\\${workspaceFolder}/main.js\""
 							},
 							"console": {
 								"type": "string",
@@ -89,7 +90,6 @@
 							},
 							"args": {
 								"type": "array",
-								"description": "%launch.args.description%",
 								"items": {
 									"type": "string"
 								},
@@ -116,8 +116,7 @@
 						"type": "quickjs",
 						"request": "launch",
 						"name": "Ask for file name",
-						"program": "${workspaceFolder}/${command:AskForProgramName}",
-						"stopOnEntry": true
+						"program": "^\"\\${workspaceFolder}/main.js\""
 					}
 				],
 				"configurationSnippets": [
@@ -128,8 +127,7 @@
 							"type": "quickjs",
 							"request": "launch",
 							"name": "Ask for file name",
-							"program": "^\"\\${workspaceFolder}/\\${command:AskForProgramName}\"",
-							"stopOnEntry": true
+							"program": "^\"\\${workspaceFolder}/main.js\""
 						}
 					}
 				]
