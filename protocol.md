@@ -30,7 +30,7 @@ For on the wire readability, the JSON messages are ended with a new line (but th
 0000001A\n{"message": "hello world"}\n
 ```
 
-So when viewing it in sniffer, the message would look as follows in the console (newlines are printed):
+So when viewing it in sniffer, the message would look as follows in the console (new lines are printed here):
 
 ```
 0000001A
