@@ -24,7 +24,7 @@ All debugger protocol messages are JSON payloads.
 00000019\n{"message": "hello world"}
 ```
 
-For on the wire readability, the JSON messages are be ended with a new line (but is not required, as it parses with or without a new line):
+For on the wire readability, the JSON messages are ended with a new line (but this is not required, as the JSON is parseable with or without a new line):
 
 ```
 0000001A\n{"message": "hello world"}\n
