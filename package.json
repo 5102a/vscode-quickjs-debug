@@ -40,6 +40,7 @@
 	},
 	"dependencies": {
 		"await-notify": "1.0.1",
+		"stream-parser": "^0.3.1",
 		"vscode-debugadapter": "1.37.0"
 	},
 	"devDependencies": {
@@ -77,8 +78,32 @@
 						"properties": {
 							"program": {
 								"type": "string",
-								"description": "Absolute path to a text file.",
-								"default": "${workspaceFolder}/${command:AskForProgramName}"
+								"description": "Absolute path to a js file."
+							},
+							"console": {
+								"type": "string",
+								"enum": [
+									"internalConsole",
+									"integratedTerminal",
+									"externalTerminal"
+								],
+								"default": "internalConsole"
+							},
+							"args": {
+								"type": "array",
+								"description": "%launch.args.description%",
+								"items": {
+									"type": "string"
+								},
+								"default": []
+							},
+							"cwd": {
+								"type": "string",
+								"default": "${workspaceFolder}"
+							},
+							"runtimeExecutable": {
+								"type": "string",
+								"markdownDescription": "Path to qjs executable"
 							},
 							"stopOnEntry": {
 								"type": "boolean",
