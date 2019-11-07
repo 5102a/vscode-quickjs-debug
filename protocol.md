@@ -1,6 +1,10 @@
+# Connection
+
+The default debugger transport is a TCP/IP connection from the qjs binary to the QuickJS VS Code extension. This can be changed by implementing a different [transport](https://github.com/koush/quickjs/blob/master/quickjs-debugger-transport-unix.c).
+
 # Wire Protocol and Framing
 
-The debugger protocol messages are framed similarly to chunked encoding and is human readable:
+Once a connection has been initiated, debugger protocol messages begin being sent. The debugger protocol messages are framed similarly to chunked encoding and is human readable:
 
 ```
 <8 character hex length>\n<message of hex length bytes>
