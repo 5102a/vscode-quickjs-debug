@@ -28,7 +28,7 @@
 			]
 		},
 		{
-			"name": "QuickJS Sample",
+			"name": "QuickJS Debug Sample",
 			"type": "quickjs",
 			"request": "launch",
 			"program": "${workspaceFolder}/test.js",
