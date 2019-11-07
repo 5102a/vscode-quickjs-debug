@@ -16,7 +16,7 @@ For example, sending hello world:
 0000000B\nhello world
 ```
 
-# JSON Message Framing
+# JSON Messages
 
 All debugger protocol messages are JSON payloads.
 
