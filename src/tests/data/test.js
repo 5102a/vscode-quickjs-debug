@@ -1,3 +1,7 @@
+import {boops} from './test2.js'
+
+boops();
+
 const gg = 9;
 function foo (t) {
     var a = 55;

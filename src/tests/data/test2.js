@@ -1,2 +1,3 @@
-var blub = new Blub();
-blub.jib();
+export function boops() {
+	console.log('hello!');
+}
