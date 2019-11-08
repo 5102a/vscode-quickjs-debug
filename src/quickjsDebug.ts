@@ -117,8 +117,8 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		// response.body.supportsDataBreakpoints = true;
 
 		// make VS Code to support completion in REPL
-		// response.body.supportsCompletionsRequest = true;
-		// response.body.completionTriggerCharacters = [ ".", "[" ];
+		response.body.supportsCompletionsRequest = true;
+		response.body.completionTriggerCharacters = [ ".", "[" ];
 
 		// make VS Code to send cancelRequests
 		// response.body.supportsCancelRequest = true;
@@ -521,24 +521,55 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		this.sendResponse(response);
 	}
 
-	protected completionsRequest(response: DebugProtocol.CompletionsResponse, args: DebugProtocol.CompletionsArguments): void {
+	protected async completionsRequest(response: DebugProtocol.CompletionsResponse, args: DebugProtocol.CompletionsArguments) {
+		if (!args.frameId) {
+			this.sendErrorResponse(response, 2030, 'completionsRequest: frameId not specified');
+			return;
+		}
+		var thread = this._stackFrames.get(args.frameId);
+		if (!thread) {
+			this.sendErrorResponse(response, 2030, 'completionsRequest: thread not found');
+			return;
+		}
+		args.frameId -= thread;
 
+		var expression = args.text.substr(0, args.text.length - 1);
+		if (!expression) {
+			this.sendErrorResponse(response, 2032, "no completion available for empty string")
+			return;
+		}
+
+		const evaluateArgs: DebugProtocol.EvaluateArguments = {
+			frameId: args.frameId,
+			expression,
+		}
+		response.command = 'evaluate';
+
+		var body = await this.sendThreadRequest(thread, response, evaluateArgs);
+		if (!body.variablesReference) {
+			this.sendErrorResponse(response, 2032, "no completion available for expression");
+			return;
+		}
+
+		if (body.indexedVariables !== undefined) {
+			this.sendErrorResponse(response, 2032, "no completion available for arrays");
+			return;
+		}
+
+		const variableArgs: DebugProtocol.VariablesArguments = {
+			variablesReference: body.variablesReference,
+		}
+		response.command = 'variables';
+		body = await this.sendThreadRequest(thread, response, variableArgs);
+
+		response.command = 'completions';
 		response.body = {
-			targets: [
-				{
-					label: "item 10",
-					sortText: "10"
-				},
-				{
-					label: "item 1",
-					sortText: "01"
-				},
-				{
-					label: "item 2",
-					sortText: "02"
-				}
-			]
-		};
+			targets: body.map(property => ({
+				label: property.name,
+				type: 'field',
+			}))
+		}
+
 		this.sendResponse(response);
 	}
 
