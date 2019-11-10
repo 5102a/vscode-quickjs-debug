@@ -512,7 +512,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		this._variables.set(variablesReference, thread);
 		body.variablesReference = variablesReference;
 
-		response.body = await this.sendThreadRequest(thread, response, args);
+		response.body = body;
 		this.sendResponse(response);
 	}
 
