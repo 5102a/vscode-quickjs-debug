@@ -1,8 +1,9 @@
 import * as CP from 'child_process';
-import { AddressInfo, Server, Socket } from 'net';
+import { AddressInfo, Server, Socket, createConnection } from 'net';
 import { basename } from 'path';
 import { InitializedEvent, Logger, logger, LoggingDebugSession, OutputEvent, Scope, Source, StackFrame, StoppedEvent, TerminatedEvent, Thread } from 'vscode-debugadapter';
 import { DebugProtocol } from 'vscode-debugprotocol';
+import { networkInterfaces } from 'os';
 const path = require('path');
 const Parser = require('stream-parser');
 const Transform = require('stream').Transform;
@@ -15,22 +16,16 @@ const fs = require('fs');
  * The interface should always match this schema.
  */
 interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
-	/** An absolute path to the "program" to debug. */
 	program: string;
-	/** Optional arguments passed to the debuggee. */
 	args?: string[];
-	/** Launch the debuggee in this working directory (specified as an absolute path). If omitted the debuggee is lauched in its own directory. */
 	cwd?: string;
-	/** Absolute path to the runtime executable to be used. Default is the runtime executable on the PATH. */
 	runtimeExecutable: string;
-	/** The port the debug extension listens on to accept incoming sessions. */
+	mode: string;
+	address: string;
 	port: number;
-	/** Run the extension and wait for QuickJS to attach. */
 	attach: boolean;
 	localRoot: string;
-	/** Where to launch the debug target. */
 	console?: ConsoleType;
-	/** enable logging the Debug Adapter Protocol */
 	trace?: boolean;
 }
 
@@ -140,6 +135,9 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 			else
 				this.sendEvent(new StoppedEvent(event.reason, thread));
 		}
+		else if (event.type === 'terminated') {
+			this.onThreadDead(thread, 'program terminated');
+		}
 	}
 
 	private handleResponse(json: any) {
@@ -166,6 +164,18 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		})
 	}
 
+	private onThreadDead(thread: number, reason: string) {
+		if (thread) {
+			thread = 0;
+			var socket = this._threads.get(thread);
+			this._threads.delete(thread);
+			if (!this._server)
+				this._terminated(reason);
+			if (socket)
+				socket.destroy();
+		}
+	}
+
 	private onSocket(socket: Socket) {
 		var parser = new MessageParser();
 		var thread: number = 0;
@@ -187,46 +197,63 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 				this.log(`unknown message ${json.type}`);
 			}
 		});
-		socket.on('close', () => {
+		const cleanup = () => {
 			if (thread) {
-				// todo: terminate?
-				this._threads.delete(thread);
+				thread = 0;
+				this.onThreadDead(thread, 'socket closed');
 			}
-		});
+		}
 		socket.pipe(parser as any);
+		socket.on('error', cleanup);
+		socket.on('close', cleanup);
 	}
 
 	protected async launchRequest(response: DebugProtocol.LaunchResponse, args: LaunchRequestArguments) {
 		this._localRoot = args.localRoot;
-
 		this.closeServer();
-		this._server = new Server(this.onSocket.bind(this));
-		this._server.listen(args.port || 0);
-		var port = (<AddressInfo>this._server.address()).port;
-		this.log(`QuickJS Debug port: ${port}`);
 
-		var cwd = <string>args.cwd || path.dirname(args.program);
-		var env = {
-			QUICKJS_DEBUG_ADDRESS: `localhost:${port}`
-		}
+		var env = {};
+		const address = args.address || 'localhost';
+		if (args.mode == 'connect') {
+			// connect to a quickjs runtime that is instructed to listen for a connection.
+			// typically connect should not be used with launching, because it
+			// needs to wait for quickjs to spin up and listen.
+			// connect should be used with attach.
 
-		if (typeof args.console === 'string') {
-			switch (args.console) {
-				case 'internalConsole':
-				case 'integratedTerminal':
-				case 'externalTerminal':
-					this._console = args.console;
-					break;
-				default:
-					this.sendErrorResponse(response, 2028, `Unknown console type '${args.console}'.`);
-					return;
+			if (!args.port) {
+				this.sendErrorResponse(response, 13, "Must specify a 'port' for 'connect'");
+				return;
 			}
+			env['QUICKJS_DEBUG_LISTEN_ADDRESS'] = `${address}:${args.port}`;
 		}
+		else {
+			this._server = new Server(this.onSocket.bind(this));
+			this._server.listen(args.port || 0);
+			var port = (<AddressInfo>this._server.address()).port;
+			this.log(`QuickJS Debug port: ${port}`);
 
-		let qjsArgs = (args.args || []).slice();
-		qjsArgs.unshift(args.program);
+			env['QUICKJS_DEBUG_ADDRESS'] = `localhost:${port}`;
+		}
 
 		if (!args.attach) {
+			var cwd = <string>args.cwd || path.dirname(args.program);
+
+			if (typeof args.console === 'string') {
+				switch (args.console) {
+					case 'internalConsole':
+					case 'integratedTerminal':
+					case 'externalTerminal':
+						this._console = args.console;
+						break;
+					default:
+						this.sendErrorResponse(response, 2028, `Unknown console type '${args.console}'.`);
+						return;
+				}
+			}
+
+			let qjsArgs = (args.args || []).slice();
+			qjsArgs.unshift(args.program);
+
 			if (this._supportsRunInTerminalRequest && (this._console === 'externalTerminal' || this._console === 'integratedTerminal')) {
 
 				const termArgs: DebugProtocol.RunInTerminalRequestArguments = {
@@ -268,6 +295,34 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 			}
 		}
 
+		if (args.mode == 'connect') {
+			var socket;
+			for (var attempt = 0; attempt < 10; attempt++) {
+				try {
+					socket = await new Promise<Socket>((resolve, reject) => {
+						var socket = createConnection(args.port, args.address);
+						socket.on('connect', () => {
+							socket.removeAllListeners();
+							resolve(socket)
+						});
+
+						socket.on('close', reject);
+						socket.on('error', reject);
+					});
+					break;
+				}
+				catch (e) {
+					await new Promise(resolve => setTimeout(resolve, 1000));
+				}
+			}
+
+			if (!socket) {
+				this.sendErrorResponse(response, 18, `Cannot launch connect (${address}:${args.port}).`);
+				return;
+			}
+
+			this.onSocket(socket);
+		}
 
 		// make sure to 'Stop' the buffered logging if 'trace' is not set
 		logger.setup(args.trace ? Logger.LogLevel.Verbose : Logger.LogLevel.Stop, false);

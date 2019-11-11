@@ -1,9 +1,9 @@
 {
 	"name": "quickjs-debug",
 	"displayName": "QuickJS Debug",
-	"version": "0.0.7",
+	"version": "0.0.8",
 	"publisher": "koush",
-	"description": "Starter extension for developing debug adapters for VS Code.",
+	"description": "Debug the QuickJS runtime.",
 	"author": {
 		"name": "Koushik Dutta",
 		"email": "koushd@gmail.com"
@@ -104,15 +104,29 @@
 								"type": "string",
 								"description": "Path to qjs executable"
 							},
+							"mode": {
+								"type": "string",
+								"description": "The debugger connection mode. Use 'listen' to have VS Code wait for QuickJS to connect. Use 'connect' to have VSCode attach to a QuickJS runtime that is listening for a debugger.",
+								"enum": [
+									"connect",
+									"listen"
+								],
+								"default": "listen"
+							},
+							"address": {
+								"type": "string",
+								"description": "The address used by he debug extension for incoming/outgoing sessions (mode dependent).",
+								"default": "localhost"
+							},
 							"port": {
 								"type": "number",
-								"description": "The port used by he debug extension for incoming sessions.",
-								"default": "0"
+								"description": "The port used by he debug extension for incoming/outgoing sessions. (mode dependent)",
+								"default": 0
 							},
 							"attach": {
 								"type": "boolean",
 								"description": "Start a QuickJS Debug session and wait for a session to attach on the given port.",
-								"default": "false"
+								"default": false
 							},
                             "localRoot": {
                                 "type": [
