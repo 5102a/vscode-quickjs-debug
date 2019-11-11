@@ -155,7 +155,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		var request_seq: number = json.request_seq;
 		var pending = this._requests.get(request_seq);
 		if (!pending) {
-			this.log(`request not found: ${request_seq}`)
+			this.logTrace(`request not found: ${request_seq}`)
 			return;
 		}
 		this._requests.delete(request_seq);
@@ -200,7 +200,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		var parser = new MessageParser();
 		var thread: number = 0;
 		parser.on('message', json => {
-			this.log(`received ${thread}: ${JSON.stringify(json)}`)
+			this.logTrace(`received ${thread}: ${JSON.stringify(json)}`)
 			// the very first message must include the thread id.
 			if (!thread) {
 				thread = json.event.thread;
@@ -215,7 +215,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 				this.handleResponse(json);
 			}
 			else {
-				this.log(`unknown message ${json.type}`);
+				this.logTrace(`unknown message ${json.type}`);
 			}
 		});
 		const cleanup = () => {
@@ -341,7 +341,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 			this._server = new Server(this.onSocket.bind(this));
 			this._server.listen(this._commonArgs.port || 0);
 			var port = (<AddressInfo>this._server.address()).port;
-			this.log(`QuickJS Debug port: ${port}`);
+			this.log(`QuickJS Debug Port: ${port}`);
 
 			env['QUICKJS_DEBUG_ADDRESS'] = `localhost:${port}`;
 		}
@@ -389,13 +389,16 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		});
 	}
 
+	public logTrace(message: string) {
+		this.log(message);
+	}
+
 	public log(message: string) {
 		this.sendEvent(new OutputEvent(message + '\n', 'console'));
-
 	}
 
 	private _terminated(reason: string): void {
-		this.log(`_terminated: ${reason}`);
+		this.log(`Debug Session Ended: ${reason}`);
 		this.closeServer();
 
 		if (!this._isTerminated) {
@@ -442,7 +445,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 			breakpoints: []
 		};
 
-		this.log(`setBreakPointsRequest: ${JSON.stringify(args)}`);
+		this.logTrace(`setBreakPointsRequest: ${JSON.stringify(args)}`);
 
 		if (!args.source.path) {
 			this.sendResponse(response);
@@ -585,11 +588,11 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 	private sendThreadMessage(thread: number, envelope: any) {
 		var socket = this._threads.get(thread);
 		if (!socket) {
-			this.log(`socket not found for thread: ${thread.toString(16)}`);
+			this.logTrace(`socket not found for thread: ${thread.toString(16)}`);
 			return;
 		}
 
-		this.log(`sent ${thread}: ${JSON.stringify(envelope)}`)
+		this.logTrace(`sent ${thread}: ${JSON.stringify(envelope)}`)
 
 		var json = JSON.stringify(envelope);
 
@@ -749,7 +752,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 				for (var source of sources) {
 					const other = this._sourceMaps.get(source);
 					if (other) {
-						this.log(`sourcemap for ${source} found in ${other.file}.map and ${sourcemap}`);
+						this.logTrace(`sourcemap for ${source} found in ${other.file}.map and ${sourcemap}`);
 					}
 					else {
 						this._sourceMaps.set(source, smc);
@@ -796,6 +799,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 				throw new Error();
 			// convert the filename into a sourcemap relative path.
 			const actualSourceLocation = Object.assign({}, sourceLocation);
+			this.logTrace(`translateFileLocationToRemote: ${JSON.stringify(sourceLocation)} to: ${JSON.stringify(actualSourceLocation)}`);
 			actualSourceLocation.source = path.relative(path.dirname(sourcemap), sourceLocation.source);
 			var unmappedPosition: NullablePosition = sm.generatedPositionFor(actualSourceLocation);
 			if (!sm.file)
@@ -829,6 +833,7 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 					column: sourceLocation.column,
 					line: sourceLocation.line,
 				});
+				this.logTrace(`translateRemoteLocationToLocal: ${JSON.stringify(sourceLocation)} to: ${JSON.stringify(original)}`);
 				if (original.line === null || original.column === null || original.source === null)
 					throw new Error("unable to map");
 				const smp = this._sourceMapPaths.get(sm);
