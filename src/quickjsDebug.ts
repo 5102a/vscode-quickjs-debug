@@ -28,10 +28,11 @@ interface CommonArguments extends DebugProtocol.LaunchRequestArguments {
 	mode: string;
 	address: string;
 	port: number;
-	localRoot: string;
+	localRoot?: string;
+	remoteRoot?: string;
 	console?: ConsoleType;
 	trace?: boolean;
-	sourceMaps?: string[];
+	sourceMaps?: object;
 }
 interface LaunchRequestArguments extends CommonArguments, DebugProtocol.LaunchRequestArguments {
 }
@@ -389,8 +390,10 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		});
 	}
 
-	public logTrace(message: string) {
-		this.log(message);
+	public async logTrace(message: string) {
+		await this._argsReady;
+		if (this._commonArgs.trace)
+			this.log(message);
 	}
 
 	public log(message: string) {
@@ -730,32 +733,33 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		this.sendResponse(response);
 	}
 
-	_sourceMaps = new Map<string, BasicSourceMapConsumer>();
-	_sourceMapRelativePath = new Map<SourceMapConsumer, string>();
+	// a map of all absolute file sources found in the sourcemaps
+	_fileToSourceMap = new Map<string, BasicSourceMapConsumer>();
 	_sourceMapsLoading: Promise<any>|undefined;
-	_sourceMapPaths = new Map<BasicSourceMapConsumer, string>();
+	// keep track of the sourcemaps and the location of the file.map used to load it
+	_sourceMaps = new Map<BasicSourceMapConsumer, string>();
 
 	async loadSourceMaps() {
 		await this._argsReady;
 		if (this._sourceMapsLoading)
 			return await this._sourceMapsLoading;
 
-		var sourceMaps = this._commonArgs.sourceMaps || [];
+		var sourceMaps = Object.keys(this._commonArgs.sourceMaps || {}) || [];
 
 		var promises = sourceMaps.map(sourcemap => (async () => {
 			try {
 				let json = JSON.parse(fs.readFileSync(sourcemap).toString());
 				var smc = await new SourceMapConsumer(json);
-				this._sourceMapPaths.set(smc, sourcemap);
+				this._sourceMaps.set(smc, sourcemap);
 				var sourceMapRoot = path.dirname(sourcemap);
 				var sources = smc.sources.map(source => path.join(sourceMapRoot, source) as string);
 				for (var source of sources) {
-					const other = this._sourceMaps.get(source);
+					const other = this._fileToSourceMap.get(source);
 					if (other) {
 						this.logTrace(`sourcemap for ${source} found in ${other.file}.map and ${sourcemap}`);
 					}
 					else {
-						this._sourceMaps.set(source, smc);
+						this._fileToSourceMap.set(source, smc);
 					}
 				}
 			}
@@ -771,16 +775,44 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 	async translateFileToRemote(file: string): Promise<string> {
 		await this.loadSourceMaps();
 
-		const sm = this._sourceMaps.get(file);
+		const sm = this._fileToSourceMap.get(file);
 		if (!sm)
 			return file;
 		return sm.file;
 	}
 
+	private getRemoteAbsolutePath(remoteFile: string, remoteRoot?: string): string {
+		if (remoteRoot == null)
+			remoteRoot = this._commonArgs.remoteRoot;
+		if (remoteRoot)
+			remoteFile = path.join(remoteRoot, remoteFile);
+		return remoteFile;
+	}
+
+	private getRemoteRelativePath(remoteFile: string, remoteRoot?: string): string {
+		if (remoteRoot == null)
+			remoteRoot = this._commonArgs.remoteRoot;
+		if (remoteRoot)
+			return path.relative(remoteRoot, remoteFile);
+		return remoteFile;
+	}
+
+	private getLocalAbsolutePath(localFile): string {
+		if (this._commonArgs.localRoot)
+			return path.join(this._commonArgs.localRoot, localFile);
+		return localFile;
+	}
+	private getLocalRelativePath(localFile: string): string {
+		if (this._commonArgs.localRoot)
+			return path.relative(this._commonArgs.localRoot, localFile);
+		return localFile;
+	}
+
+
 	async translateFileLocationToRemote(sourceLocation: MappedPosition): Promise<MappedPosition> {
 		await this.loadSourceMaps();
 
-		// step 1: translate the local source position to a relative source posiiton.
+		// step 1: translate the absolute local source position to a relative source position.
 		// (has sourcemap) /local/path/to/test.ts:10 -> test.js:15
 		// (no sourcemap)  /local/path/to/test.js:10 -> test.js:10
 		// step 2: translate the relative source file to an absolute remote source file
@@ -788,47 +820,53 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		// (no sourcemap)  test.js:10 -> /remote/path/to/test.js:10
 		// (no remote root)test.js:10 -> test.js:10
 
-
-		var ret: MappedPosition;
 		try {
-			const sm = this._sourceMaps.get(sourceLocation.source);
+			const sm = this._fileToSourceMap.get(sourceLocation.source);
 			if (!sm)
 				throw new Error('no source map');
-			const sourcemap = this._sourceMapPaths.get(sm);
+			const sourcemap = this._sourceMaps.get(sm);
 			if (!sourcemap)
 				throw new Error();
-			// convert the filename into a sourcemap relative path.
 			const actualSourceLocation = Object.assign({}, sourceLocation);
 			this.logTrace(`translateFileLocationToRemote: ${JSON.stringify(sourceLocation)} to: ${JSON.stringify(actualSourceLocation)}`);
+			// convert the local absolute path into a sourcemap relative path.
 			actualSourceLocation.source = path.relative(path.dirname(sourcemap), sourceLocation.source);
 			var unmappedPosition: NullablePosition = sm.generatedPositionFor(actualSourceLocation);
-			if (!sm.file)
+			if (!unmappedPosition.line == null)
 				throw new Error('map failed');
-			ret = {
-				source: sm.file,
+			// now given a source mapped relative path, translate that into a remote path.
+			const smp = this._sourceMaps.get(sm);
+			let remoteRoot = this._commonArgs.sourceMaps && this._commonArgs.sourceMaps[smp!]
+			let remoteFile = this.getRemoteAbsolutePath(sm.file, remoteRoot);
+			return {
+				source: remoteFile,
 				// the source-map docs indicate that line is 1 based, but that seems to be wrong.
 				line: (unmappedPosition.line || 0) + 1,
 				column: unmappedPosition.column || 0,
 			}
 		}
 		catch (e) {
-			// local files need to be resolved from a local relative
-			ret = Object.assign({}, sourceLocation);
-			ret.source = this._commonArgs.localRoot ? path.relative(this._commonArgs.localRoot, sourceLocation.source) : sourceLocation.source;
+			// local files need to be resolved to remote files.
+			var ret = Object.assign({}, sourceLocation);
+			ret.source = this.getRemoteAbsolutePath(this.getLocalRelativePath(sourceLocation.source));
+			return ret;
 		}
-
-		// todo: source mapped files paths are already in relative form. resolve this against a remoteRoot.
-		return ret;
 	}
 
-	// todo: remote paths need to be translated from the remote root.
 	async translateRemoteLocationToLocal(sourceLocation: MappedPosition): Promise<MappedPosition> {
 		await this.loadSourceMaps();
 
 		try {
-			for (var sm of this._sourceMapPaths.keys()) {
-				if (sm.file !== sourceLocation.source)
+			for (var sm of this._sourceMaps.keys()) {
+				const smp = this._sourceMaps.get(sm);
+
+				// given a remote path, translate that into a source map relative path for lookup
+				let remoteRoot = this._commonArgs.sourceMaps && this._commonArgs.sourceMaps[smp!]
+				let relativeFile = this.getRemoteRelativePath(sourceLocation.source, remoteRoot);
+
+				if (relativeFile !== sm.file)
 					continue;
+
 				const original = sm.originalPositionFor({
 					column: sourceLocation.column,
 					line: sourceLocation.line,
@@ -836,7 +874,8 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 				this.logTrace(`translateRemoteLocationToLocal: ${JSON.stringify(sourceLocation)} to: ${JSON.stringify(original)}`);
 				if (original.line === null || original.column === null || original.source === null)
 					throw new Error("unable to map");
-				const smp = this._sourceMapPaths.get(sm);
+
+				// now given a source mapped relative path, translate that into a local path.
 				return {
 					source: path.join(path.dirname(smp), original.source),
 					line: original.line,
@@ -846,7 +885,10 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 			throw new Error();
 		}
 		catch (e) {
-			return Object.assign({}, sourceLocation);;
+			// remote files need to be resolved to local files.
+			var ret = Object.assign({}, sourceLocation);
+			ret.source = this.getLocalAbsolutePath(this.getRemoteRelativePath(sourceLocation.source));
+			return ret;
 		}
 	}
 }

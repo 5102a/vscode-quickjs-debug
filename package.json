@@ -116,22 +116,22 @@
 							},
 							"address": {
 								"type": "string",
-								"description": "The address used by he debug extension for incoming/outgoing sessions (mode dependent).",
+								"description": "The address used by he debug extension for incoming/outgoing sessions (connection 'mode' dependent).",
 								"default": "localhost"
 							},
 							"port": {
 								"type": "number",
-								"description": "The port used by he debug extension for incoming/outgoing sessions. (mode dependent)",
+								"description": "The port used by he debug extension for incoming/outgoing sessions. (connection 'mode' dependent)",
 								"default": 0
-							},
-							"attach": {
-								"type": "boolean",
-								"description": "Start a QuickJS Debug session and wait for a session to attach on the given port.",
-								"default": false
 							},
 							"localRoot": {
 								"type": "string",
-								"description": "The local source root used for unqualified files.",
+								"description": "The local source root use for files that do not have source maps.",
+								"default": "${workspaceFolder}/"
+							},
+							"remoteRoot": {
+								"type": "string",
+								"description": "The remote root use for files that do not have source maps.",
 								"default": "${workspaceFolder}/"
 							},
 							"trace": {
@@ -140,11 +140,11 @@
 								"default": true
 							},
 							"sourceMaps": {
-								"type": "array",
-								"items": {
-									"type": "string"
-								},
-								"description": "The list of sourcemaps file from a transpilation tool like webpack. If specified, the localRoot will map to the sourcemap's sourceRoot."
+								"type": "object",
+								"description": "The sourcemaps from a transpilation tool like webpack and their corresponding remoteRoots. Specifying null will use the default remoteRoot.",
+								"default": {
+									"${workspaceFolder}/out/main.quickjs.js.map": "${workspaceFolder}/src"
+								}
 							}
 						}
 					},
@@ -161,12 +161,12 @@
 							},
 							"address": {
 								"type": "string",
-								"description": "The address used by he debug extension for incoming/outgoing sessions (mode dependent).",
+								"description": "The address used by he debug extension for incoming/outgoing sessions (connection 'mode' dependent).",
 								"default": "localhost"
 							},
 							"port": {
 								"type": "number",
-								"description": "The port used by he debug extension for incoming/outgoing sessions. (mode dependent)",
+								"description": "The port used by he debug extension for incoming/outgoing sessions. (connection 'mode' dependent)",
 								"default": 0
 							},
 							"localRoot": {
@@ -180,12 +180,11 @@
 								"default": true
 							},
 							"sourceMaps": {
-								"type": "array",
-								"items": {
-									"type": "string"
-								},
-								"description": "The list of sourcemaps from a transpilation tool like webpack. If specified, the localRoot will map to the sourcemap's sourceRoot.",
-								"default": ["^\"\\${workspaceFolder}/out/main.quickjs.js.map\""]
+								"type": "object",
+								"description": "The sourcemaps from a transpilation tool like webpack and their corresponding remoteRoots. Specifying null will use the default remoteRoot.",
+								"default": {
+									"${workspaceFolder}/out/main.quickjs.js.map": "${workspaceFolder}/src"
+								}
 							}
 						}
 					}
@@ -218,10 +217,7 @@
 						"body": {
 							"type": "quickjs",
 							"request": "launch",
-							"attach": true,
 							"name": "Attach QuickJS",
-							"runtimeExecutable": "/path/to/qjs",
-							"program": "^\"\\${workspaceFolder}/main.js\"",
 							"localRoot": "^\"\\${workspaceFolder}/\""
 						}
 					}
