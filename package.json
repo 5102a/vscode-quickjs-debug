@@ -39,6 +39,7 @@
 	},
 	"dependencies": {
 		"await-notify": "1.0.1",
+		"source-map": "^0.7.3",
 		"stream-parser": "^0.3.1",
 		"vscode-debugadapter": "1.37.0"
 	},
@@ -128,18 +129,63 @@
 								"description": "Start a QuickJS Debug session and wait for a session to attach on the given port.",
 								"default": false
 							},
-                            "localRoot": {
-                                "type": [
-                                    "string",
-                                    "null"
-                                ],
-                                "description": "The local source root used for unqualified files.",
+							"localRoot": {
+								"type": "string",
+								"description": "The local source root used for unqualified files.",
 								"default": "${workspaceFolder}/"
 							},
 							"trace": {
 								"type": "boolean",
 								"description": "Enable logging of the Debug Adapter Protocol.",
 								"default": true
+							},
+							"sourceMaps": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "The list of sourcemaps file from a transpilation tool like webpack. If specified, the localRoot will map to the sourcemap's sourceRoot."
+							}
+						}
+					},
+					"attach": {
+						"properties": {
+							"mode": {
+								"type": "string",
+								"description": "The debugger connection mode. Use 'listen' to have VS Code wait for QuickJS to connect. Use 'connect' to have VSCode attach to a QuickJS runtime that is listening for a debugger.",
+								"enum": [
+									"connect",
+									"listen"
+								],
+								"default": "listen"
+							},
+							"address": {
+								"type": "string",
+								"description": "The address used by he debug extension for incoming/outgoing sessions (mode dependent).",
+								"default": "localhost"
+							},
+							"port": {
+								"type": "number",
+								"description": "The port used by he debug extension for incoming/outgoing sessions. (mode dependent)",
+								"default": 0
+							},
+							"localRoot": {
+								"type": "string",
+								"description": "The local source root used for unqualified files.",
+								"default": "${workspaceFolder}/"
+							},
+							"trace": {
+								"type": "boolean",
+								"description": "Enable logging of the Debug Adapter Protocol.",
+								"default": true
+							},
+							"sourceMaps": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "The list of sourcemaps from a transpilation tool like webpack. If specified, the localRoot will map to the sourcemap's sourceRoot.",
+								"default": ["^\"\\${workspaceFolder}/out/main.quickjs.js.map\""]
 							}
 						}
 					}
