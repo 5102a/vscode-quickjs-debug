@@ -1,26 +1,17 @@
 import * as CP from 'child_process';
-import { AddressInfo, Server, Socket, createConnection } from 'net';
+import { AddressInfo, createConnection, Server, Socket } from 'net';
 import { basename } from 'path';
+import { BasicSourceMapConsumer, MappedPosition, NullablePosition, SourceMapConsumer } from 'source-map';
 import { InitializedEvent, Logger, logger, LoggingDebugSession, OutputEvent, Scope, Source, StackFrame, StoppedEvent, TerminatedEvent, Thread } from 'vscode-debugadapter';
 import { DebugProtocol } from 'vscode-debugprotocol';
-import { networkInterfaces } from 'os';
 const path = require('path');
 const Parser = require('stream-parser');
 const Transform = require('stream').Transform;
 const fs = require('fs');
-import {SourceMapConsumer, MappedPosition, Position, BasicSourceMapConsumer, NullablePosition} from 'source-map';
-import { scm } from 'vscode';
-import { stringify } from 'querystring';
 const { Subject } = require('await-notify');
+import {SourcemapSession, SourcemapArguments} from "./sourcemapSession";
 
-
-/**
- * This interface describes the quickjs-debug specific launch attributes
- * (which are not part of the Debug Adapter Protocol).
- * The schema for these attributes lives in the package.json of the quickjs-debug extension.
- * The interface should always match this schema.
- */
-interface CommonArguments extends DebugProtocol.LaunchRequestArguments {
+interface CommonArguments extends SourcemapArguments {
 	program: string;
 	args?: string[];
 	cwd?: string;
@@ -28,11 +19,8 @@ interface CommonArguments extends DebugProtocol.LaunchRequestArguments {
 	mode: string;
 	address: string;
 	port: number;
-	localRoot?: string;
-	remoteRoot?: string;
 	console?: ConsoleType;
 	trace?: boolean;
-	sourceMaps?: object;
 }
 interface LaunchRequestArguments extends CommonArguments, DebugProtocol.LaunchRequestArguments {
 }
@@ -71,7 +59,7 @@ interface PendingResponse {
 	reject: Function;
 }
 
-export class QuickJSDebugSession extends LoggingDebugSession {
+export class QuickJSDebugSession extends SourcemapSession {
 	private static RUNINTERMINAL_TIMEOUT = 5000;
 
 	private _server?: Server;
@@ -388,6 +376,11 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		process.stderr.on('data', (data: string) => {
 			this.sendEvent(new OutputEvent(data.toString(), 'stderr'));
 		});
+	}
+
+	async getArguments(): Promise<SourcemapArguments> {
+		await this._argsReady;
+		return this._commonArgs;
 	}
 
 	public async logTrace(message: string) {
@@ -731,164 +724,5 @@ export class QuickJSDebugSession extends LoggingDebugSession {
 		}
 
 		this.sendResponse(response);
-	}
-
-	// a map of all absolute file sources found in the sourcemaps
-	_fileToSourceMap = new Map<string, BasicSourceMapConsumer>();
-	_sourceMapsLoading: Promise<any>|undefined;
-	// keep track of the sourcemaps and the location of the file.map used to load it
-	_sourceMaps = new Map<BasicSourceMapConsumer, string>();
-
-	async loadSourceMaps() {
-		await this._argsReady;
-		if (this._sourceMapsLoading)
-			return await this._sourceMapsLoading;
-
-		var sourceMaps = Object.keys(this._commonArgs.sourceMaps || {}) || [];
-
-		var promises = sourceMaps.map(sourcemap => (async () => {
-			try {
-				let json = JSON.parse(fs.readFileSync(sourcemap).toString());
-				var smc = await new SourceMapConsumer(json);
-				this._sourceMaps.set(smc, sourcemap);
-				var sourceMapRoot = path.dirname(sourcemap);
-				var sources = smc.sources.map(source => path.join(sourceMapRoot, source) as string);
-				for (var source of sources) {
-					const other = this._fileToSourceMap.get(source);
-					if (other) {
-						this.logTrace(`sourcemap for ${source} found in ${other.file}.map and ${sourcemap}`);
-					}
-					else {
-						this._fileToSourceMap.set(source, smc);
-					}
-				}
-			}
-			catch (e) {
-			}
-		})());
-
-		this._sourceMapsLoading = Promise.all(promises);
-
-		return await this._sourceMapsLoading;
-	}
-
-	async translateFileToRemote(file: string): Promise<string> {
-		await this.loadSourceMaps();
-
-		const sm = this._fileToSourceMap.get(file);
-		if (!sm)
-			return file;
-		return sm.file;
-	}
-
-	private getRemoteAbsolutePath(remoteFile: string, remoteRoot?: string): string {
-		if (remoteRoot == null)
-			remoteRoot = this._commonArgs.remoteRoot;
-		if (remoteRoot)
-			remoteFile = path.join(remoteRoot, remoteFile);
-		return remoteFile;
-	}
-
-	private getRemoteRelativePath(remoteFile: string, remoteRoot?: string): string {
-		if (remoteRoot == null)
-			remoteRoot = this._commonArgs.remoteRoot;
-		if (remoteRoot)
-			return path.relative(remoteRoot, remoteFile);
-		return remoteFile;
-	}
-
-	private getLocalAbsolutePath(localFile): string {
-		if (this._commonArgs.localRoot)
-			return path.join(this._commonArgs.localRoot, localFile);
-		return localFile;
-	}
-	private getLocalRelativePath(localFile: string): string {
-		if (this._commonArgs.localRoot)
-			return path.relative(this._commonArgs.localRoot, localFile);
-		return localFile;
-	}
-
-
-	async translateFileLocationToRemote(sourceLocation: MappedPosition): Promise<MappedPosition> {
-		await this.loadSourceMaps();
-
-		// step 1: translate the absolute local source position to a relative source position.
-		// (has sourcemap) /local/path/to/test.ts:10 -> test.js:15
-		// (no sourcemap)  /local/path/to/test.js:10 -> test.js:10
-		// step 2: translate the relative source file to an absolute remote source file
-		// (has sourcemap) test.js:15 -> /remote/path/to/test.js:15
-		// (no sourcemap)  test.js:10 -> /remote/path/to/test.js:10
-		// (no remote root)test.js:10 -> test.js:10
-
-		try {
-			const sm = this._fileToSourceMap.get(sourceLocation.source);
-			if (!sm)
-				throw new Error('no source map');
-			const sourcemap = this._sourceMaps.get(sm);
-			if (!sourcemap)
-				throw new Error();
-			const actualSourceLocation = Object.assign({}, sourceLocation);
-			this.logTrace(`translateFileLocationToRemote: ${JSON.stringify(sourceLocation)} to: ${JSON.stringify(actualSourceLocation)}`);
-			// convert the local absolute path into a sourcemap relative path.
-			actualSourceLocation.source = path.relative(path.dirname(sourcemap), sourceLocation.source);
-			var unmappedPosition: NullablePosition = sm.generatedPositionFor(actualSourceLocation);
-			if (!unmappedPosition.line == null)
-				throw new Error('map failed');
-			// now given a source mapped relative path, translate that into a remote path.
-			const smp = this._sourceMaps.get(sm);
-			let remoteRoot = this._commonArgs.sourceMaps && this._commonArgs.sourceMaps[smp!]
-			let remoteFile = this.getRemoteAbsolutePath(sm.file, remoteRoot);
-			return {
-				source: remoteFile,
-				// the source-map docs indicate that line is 1 based, but that seems to be wrong.
-				line: (unmappedPosition.line || 0) + 1,
-				column: unmappedPosition.column || 0,
-			}
-		}
-		catch (e) {
-			// local files need to be resolved to remote files.
-			var ret = Object.assign({}, sourceLocation);
-			ret.source = this.getRemoteAbsolutePath(this.getLocalRelativePath(sourceLocation.source));
-			return ret;
-		}
-	}
-
-	async translateRemoteLocationToLocal(sourceLocation: MappedPosition): Promise<MappedPosition> {
-		await this.loadSourceMaps();
-
-		try {
-			for (var sm of this._sourceMaps.keys()) {
-				const smp = this._sourceMaps.get(sm);
-
-				// given a remote path, translate that into a source map relative path for lookup
-				let remoteRoot = this._commonArgs.sourceMaps && this._commonArgs.sourceMaps[smp!]
-				let relativeFile = this.getRemoteRelativePath(sourceLocation.source, remoteRoot);
-
-				if (relativeFile !== sm.file)
-					continue;
-
-				const original = sm.originalPositionFor({
-					column: sourceLocation.column,
-					line: sourceLocation.line,
-				});
-				this.logTrace(`translateRemoteLocationToLocal: ${JSON.stringify(sourceLocation)} to: ${JSON.stringify(original)}`);
-				if (original.line === null || original.column === null || original.source === null)
-					throw new Error("unable to map");
-
-				// now given a source mapped relative path, translate that into a local path.
-				return {
-					source: path.join(path.dirname(smp), original.source),
-					line: original.line,
-					column: original.column,
-				}
-			}
-			throw new Error();
-		}
-		catch (e) {
-			// remote files need to be resolved to local files.
-			var ret = Object.assign({}, sourceLocation);
-			ret.source = this.getLocalAbsolutePath(this.getRemoteRelativePath(sourceLocation.source));
-			return ret;
-		}
 	}
 }
