@@ -1,15 +1,16 @@
 import * as CP from 'child_process';
 import { AddressInfo, createConnection, Server, Socket } from 'net';
 import { basename } from 'path';
-import { BasicSourceMapConsumer, MappedPosition, NullablePosition, SourceMapConsumer } from 'source-map';
-import { InitializedEvent, Logger, logger, LoggingDebugSession, OutputEvent, Scope, Source, StackFrame, StoppedEvent, TerminatedEvent, Thread } from 'vscode-debugadapter';
+import { MappedPosition } from 'source-map';
+import { InitializedEvent, Logger, logger, OutputEvent, Scope, Source, StackFrame, StoppedEvent, TerminatedEvent, Thread } from 'vscode-debugadapter';
 import { DebugProtocol } from 'vscode-debugprotocol';
+import { SourcemapArguments } from './sourcemapArguments';
+import { SourcemapSession } from "./sourcemapSession";
 const path = require('path');
 const Parser = require('stream-parser');
 const Transform = require('stream').Transform;
 const fs = require('fs');
 const { Subject } = require('await-notify');
-import {SourcemapSession, SourcemapArguments} from "./sourcemapSession";
 
 interface CommonArguments extends SourcemapArguments {
 	program: string;
