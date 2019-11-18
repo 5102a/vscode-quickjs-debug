@@ -28,3 +28,7 @@ You can now step through the `test.js` file, set and hit breakpoints.
   * Switch to the debug viewlet and press the gear dropdown.
   * Select the debug environment "QuickJS Debug Sample".
   * Press `F5` to start debugging.
+
+## Protocol
+
+Protocol documentation is [here](protocol.md).
