@@ -77,7 +77,7 @@ export abstract class SourcemapSession extends LoggingDebugSession {
 		return remoteFile;
 	}
 
-	private async getLocalAbsolutePath(localFile): Promise<string> {
+	private async getLocalAbsolutePath(localFile: string): Promise<string> {
 		const commonArgs = await this.getArguments();
 		if (commonArgs.localRoot)
 			return path.join(commonArgs.localRoot, localFile);
@@ -171,7 +171,7 @@ export abstract class SourcemapSession extends LoggingDebugSession {
 		catch (e) {
 			// remote files need to be resolved to local files.
 			var ret = Object.assign({}, sourceLocation);
-			ret.source = await this.getLocalAbsolutePath(this.getRemoteRelativePath(sourceLocation.source));
+			ret.source = await this.getLocalAbsolutePath(await this.getRemoteRelativePath(sourceLocation.source));
 			return ret;
 		}
 	}

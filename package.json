@@ -1,7 +1,7 @@
 {
 	"name": "quickjs-debug",
-	"displayName": "QuickJS Debug",
-	"version": "0.0.8",
+	"displayName": "QuickJS Debugger",
+	"version": "0.0.9",
 	"publisher": "koush",
 	"description": "Debug the QuickJS runtime.",
 	"author": {
