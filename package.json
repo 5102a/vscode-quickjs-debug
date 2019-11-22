@@ -1,7 +1,7 @@
 {
 	"name": "quickjs-debug",
 	"displayName": "QuickJS Debugger",
-	"version": "0.0.9",
+	"version": "0.0.11",
 	"publisher": "koush",
 	"description": "Debug the QuickJS runtime.",
 	"author": {
@@ -195,7 +195,7 @@
 						"request": "launch",
 						"name": "Launch QuickJS",
 						"runtimeExecutable": "/path/to/qjs",
-						"program": "^\"\\${workspaceFolder}/main.js\""
+						"program": "^\"${workspaceFolder}/main.js\""
 					}
 				],
 				"configurationSnippets": [
@@ -207,8 +207,7 @@
 							"request": "launch",
 							"name": "Launch QuickJS",
 							"runtimeExecutable": "/path/to/qjs",
-							"program": "^\"\\${workspaceFolder}/main.js\"",
-							"localRoot": "^\"\\${workspaceFolder}/\""
+							"program": "^\"\\${workspaceFolder}/main.js\""
 						}
 					},
 					{

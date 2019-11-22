@@ -9,7 +9,6 @@ import { SourcemapSession } from "./sourcemapSession";
 const path = require('path');
 const Parser = require('stream-parser');
 const Transform = require('stream').Transform;
-const fs = require('fs');
 const { Subject } = require('await-notify');
 
 interface CommonArguments extends SourcemapArguments {
@@ -186,6 +185,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 		}
 	}
 
+
 	private onSocket(socket: Socket) {
 		var parser = new MessageParser();
 		var thread: number = 0;
@@ -217,6 +217,12 @@ export class QuickJSDebugSession extends SourcemapSession {
 		socket.pipe(parser as any);
 		socket.on('error', cleanup);
 		socket.on('close', cleanup);
+	}
+
+	protected disconnectRequest(response: DebugProtocol.DisconnectResponse, args: DebugProtocol.DisconnectArguments, request?: DebugProtocol.Request): void {
+		this.closeServer();
+		this.closeSockets();
+		this.sendResponse(response);
 	}
 
     protected async attachRequest(response: DebugProtocol.AttachResponse, args: AttachRequestArguments, request?: DebugProtocol.Request) {
@@ -397,6 +403,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 	private _terminated(reason: string): void {
 		this.log(`Debug Session Ended: ${reason}`);
 		this.closeServer();
+		this.closeSockets()
 
 		if (!this._isTerminated) {
 			this._isTerminated = true;
@@ -409,6 +416,12 @@ export class QuickJSDebugSession extends SourcemapSession {
 			this._server.close();
 			this._server = undefined;
 		}
+	}
+	private async closeSockets() {
+		for (var thread of this._threads.values()) {
+			thread.destroy()
+		}
+		this._threads.clear()
 	}
 
 	protected async terminateRequest(response: DebugProtocol.TerminateResponse, args: DebugProtocol.TerminateArguments, request?: DebugProtocol.Request) {

@@ -2,10 +2,7 @@ import { BasicSourceMapConsumer, MappedPosition, NullablePosition, SourceMapCons
 import { LoggingDebugSession } from 'vscode-debugadapter';
 import { SourcemapArguments } from "./sourcemapArguments";
 const path = require('path');
-const Parser = require('stream-parser');
-const Transform = require('stream').Transform;
 const fs = require('fs');
-const { Subject } = require('await-notify');
 
 export abstract class SourcemapSession extends LoggingDebugSession {
 	// a map of all absolute file sources found in the sourcemaps
