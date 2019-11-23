@@ -5,7 +5,7 @@ This is a VS Code debug adapter for [QuickJS](https://bellard.org/quickjs/).
 QuickJS Debugger supports *stepping*, *continue*, *breakpoints*, *evaluation*, and
 *variable access*.
 
-*The official QuickJS release does not have any debugger support.* The QuickJS Debugger requires a forked version of QuickJS, that has minimal changes necessary to support debugging.
+**The official QuickJS release does not have any debugger support.** The QuickJS Debugger requires a forked version of QuickJS, that has minimal changes necessary to support debugging.
 
 ## Using QuickJS Debug
 
