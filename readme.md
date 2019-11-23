@@ -3,7 +3,7 @@
 This is a VS Code debug adapter for [QuickJS](https://bellard.org/quickjs/).
 
 QuickJS Debug supports *stepping*, *continue*, *breakpoints*, *evaluation*, and
-*variable access* but it is not connected to any real debugger.
+*variable access*.
 
 ## Using QuickJS Debug
 
