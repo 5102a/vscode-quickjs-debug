@@ -1,7 +1,7 @@
 {
 	"name": "quickjs-debug",
 	"displayName": "QuickJS Debugger",
-	"version": "0.0.11",
+	"version": "0.0.12",
 	"publisher": "koush",
 	"description": "Debug the QuickJS runtime.",
 	"author": {
@@ -79,7 +79,7 @@
 							"program": {
 								"type": "string",
 								"description": "Absolute path to a js file.",
-								"default": "^\"\\${workspaceFolder}/main.js\""
+								"default": "${workspaceFolder}/main.js"
 							},
 							"console": {
 								"type": "string",
@@ -132,7 +132,7 @@
 							"remoteRoot": {
 								"type": "string",
 								"description": "The remote root use for files that do not have source maps.",
-								"default": "${workspaceFolder}/"
+								"default": ""
 							},
 							"trace": {
 								"type": "boolean",
@@ -173,6 +173,11 @@
 								"type": "string",
 								"description": "The local source root used for unqualified files.",
 								"default": "${workspaceFolder}/"
+							},
+							"remoteRoot": {
+								"type": "string",
+								"description": "The remote root use for files that do not have source maps.",
+								"default": ""
 							},
 							"trace": {
 								"type": "boolean",
