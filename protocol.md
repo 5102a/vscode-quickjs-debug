@@ -7,13 +7,13 @@ The default debugger transport is a TCP/IP connection from the qjs binary to the
 Once a connection has been initiated, debugger protocol messages begin being sent. The wire protocol messages are framed similarly to chunked encoding and is human readable:
 
 ```
-<8 character hex length>\n<message of hex length bytes>
+<8 character hex length>\n<message of hex length bytes>\n
 ```
 
 For example, sending hello world:
 
 ```
-0000000B\nhello world
+0000000B\nhello world\n
 ```
 
 # JSON Messages
@@ -21,7 +21,7 @@ For example, sending hello world:
 All debugger protocol messages are JSON payloads.
 
 ```
-00000019\n{"message": "hello world"}
+00000019\n{"message": "hello world"}\n
 ```
 
 For on the wire readability, the JSON messages are ended with a new line (but this is not required, as the JSON is parseable with or without a new line):
