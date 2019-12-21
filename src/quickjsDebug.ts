@@ -2,7 +2,7 @@ import * as CP from 'child_process';
 import { AddressInfo, createConnection, Server, Socket } from 'net';
 import { basename } from 'path';
 import { MappedPosition } from 'source-map';
-import { InitializedEvent, Logger, logger, OutputEvent, Scope, Source, StackFrame, StoppedEvent, TerminatedEvent, Thread } from 'vscode-debugadapter';
+import { InitializedEvent, Logger, logger, OutputEvent, Scope, Source, StackFrame, StoppedEvent, TerminatedEvent, Thread, ThreadEvent } from 'vscode-debugadapter';
 import { DebugProtocol } from 'vscode-debugprotocol';
 import { SourcemapArguments } from './sourcemapArguments';
 import { SourcemapSession } from "./sourcemapSession";
@@ -196,6 +196,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 				thread = json.event.thread;
 				this._threads.set(thread, socket);
 				this.newSession(thread);
+				this.sendEvent(new ThreadEvent("new", thread));
 			}
 
 			if (json.type === 'event') {
