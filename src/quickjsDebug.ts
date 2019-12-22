@@ -6,6 +6,7 @@ import { InitializedEvent, Logger, logger, OutputEvent, Scope, Source, StackFram
 import { DebugProtocol } from 'vscode-debugprotocol';
 import { SourcemapArguments } from './sourcemapArguments';
 import { SourcemapSession } from "./sourcemapSession";
+import { throws } from 'assert';
 const path = require('path');
 const Parser = require('stream-parser');
 const Transform = require('stream').Transform;
@@ -197,6 +198,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 				this._threads.set(thread, socket);
 				this.newSession(thread);
 				this.sendEvent(new ThreadEvent("new", thread));
+				this.emit('quickjs-thread');
 			}
 
 			if (json.type === 'event') {
@@ -512,7 +514,14 @@ export class QuickJSDebugSession extends SourcemapSession {
 		}
 	}
 
-	protected threadsRequest(response: DebugProtocol.ThreadsResponse): void {
+	protected async threadsRequest(response: DebugProtocol.ThreadsResponse): Promise<void> {
+		if (this._threads.size == 0) {
+			await new Promise((resolve, reject) => {
+				this.once('quickjs-thread', () => {
+					resolve();
+				})
+			});
+		}
 		response.body = {
 			threads: Array.from(this._threads.keys()).map(thread => new Thread(thread, `thread 0x${thread.toString(16)}`))
 		}
