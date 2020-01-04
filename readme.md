@@ -31,6 +31,27 @@ You can now step through the `test.js` file, set and hit breakpoints.
   * Select the debug environment "QuickJS Debug Sample".
   * Press `F5` to start debugging.
 
+# Embedding
+
+To listen for a connection in embedded quickjs (attach + connect with vscode debugger):
+```c
+// address is in format "0.0.0.0:6666" to listen on all addresses on port 6666
+void js_debugger_wait_connection(JSContext *ctx, const char* address);
+```
+
+To initiate a connection in embedded quickjs (attach + listen with vscode debugger):
+```c
+// address is in format "192.168.1.66:6666" to connect to 192.168.1.66 on port 6666
+void js_debugger_connect(JSContext *ctx, const char* address);
+```
+
+Alternatively, provide one of the following environment variables before starting the process embedded with QuickJS:
+
+`QUICKJS_DEBUG_ADDRESS` or `QUICKJS_DEBUG_LISTEN_ADDRESS` with the same value as above.
+
+Using these methods will block execution until the debugger has attached.
+
+
 ## Protocol
 
 Protocol documentation is [here](protocol.md).
