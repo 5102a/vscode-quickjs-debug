@@ -20,17 +20,6 @@ You can now step through the `test.js` file, set and hit breakpoints.
 
 ![QuickJS Debug](images/quickjs-debug-demo.png)
 
-## Build and Run
-
-
-* Clone the project
-* Open the project folder in VS Code.
-* Press `F5` to build and launch QuickJS Debug in another VS Code window. In that window:
-  * Open a new workspace, create a new 'program' file `readme.md` and enter several lines of arbitrary text.
-  * Switch to the debug viewlet and press the gear dropdown.
-  * Select the debug environment "QuickJS Debug Sample".
-  * Press `F5` to start debugging.
-
 # Embedding
 
 To listen for a connection in embedded quickjs (attach + connect with vscode debugger):
