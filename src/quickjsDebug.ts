@@ -6,7 +6,6 @@ import { InitializedEvent, Logger, logger, OutputEvent, Scope, Source, StackFram
 import { DebugProtocol } from 'vscode-debugprotocol';
 import { SourcemapArguments } from './sourcemapArguments';
 import { SourcemapSession } from "./sourcemapSession";
-import { throws } from 'assert';
 const path = require('path');
 const Parser = require('stream-parser');
 const Transform = require('stream').Transform;
@@ -40,13 +39,13 @@ class MessageParser extends Transform {
 	}
 
 	private onLength(buffer: Buffer) {
-		var length = parseInt(buffer.toString(), 16);
+		let length = parseInt(buffer.toString(), 16);
 		this.emit('length', length);
 		this._bytes(length, this.onMessage);
 	}
 
 	private onMessage(buffer: Buffer) {
-		var json = JSON.parse(buffer.toString());
+		let json = JSON.parse(buffer.toString());
 		this.emit('message', json);
 		this._bytes(9, this.onLength);
 	}
@@ -67,7 +66,8 @@ export class QuickJSDebugSession extends SourcemapSession {
 	private _supportsRunInTerminalRequest = false;
 	private _console: ConsoleType = 'internalConsole';
 	private _isTerminated: boolean;
-	private _threads = new Map<number, Socket>();
+	private _threads = new Set<number>();
+	private _connection?: Socket;
 	private _requests = new Map<number, PendingResponse>();
 	// contains a list of real source files and their source mapped breakpoints.
 	// ie: file1.ts -> webpack.main.js:59
@@ -107,14 +107,14 @@ export class QuickJSDebugSession extends SourcemapSession {
 		response.body.exceptionBreakpointFilters = [{
 			label: "All Exceptions",
 			filter: "exceptions",
-		}]
+		}];
 
 		// make VS Code to support data breakpoints
 		// response.body.supportsDataBreakpoints = true;
 
 		// make VS Code to support completion in REPL
 		response.body.supportsCompletionsRequest = true;
-		response.body.completionTriggerCharacters = [ ".", "[" ];
+		response.body.completionTriggerCharacters = [".", "["];
 
 		// make VS Code to send cancelRequests
 		// response.body.supportsCancelRequest = true;
@@ -134,18 +134,26 @@ export class QuickJSDebugSession extends SourcemapSession {
 	private handleEvent(thread: number, event: any) {
 		if (event.type === 'StoppedEvent') {
 			if (event.reason !== 'entry')
-			this.sendEvent(new StoppedEvent(event.reason, thread));
+				this.sendEvent(new StoppedEvent(event.reason, thread));
 		}
 		else if (event.type === 'terminated') {
-			this.onThreadDead(thread, 'program terminated');
+			this._terminated('remote terminated');
+		}
+		else if (event.type === "ThreadEvent") {
+			const threadEvent = new ThreadEvent(event.reason, thread);
+			if (threadEvent.body.reason === 'new')
+				this._threads.add(thread);
+			else if (threadEvent.body.reason === 'exited')
+				this._threads.delete(thread);
+			this.sendEvent(threadEvent);
 		}
 	}
 
 	private handleResponse(json: any) {
-		var request_seq: number = json.request_seq;
-		var pending = this._requests.get(request_seq);
+		let request_seq: number = json.request_seq;
+		let pending = this._requests.get(request_seq);
 		if (!pending) {
-			this.logTrace(`request not found: ${request_seq}`)
+			this.logTrace(`request not found: ${request_seq}`);
 			return;
 		}
 		this._requests.delete(request_seq);
@@ -155,7 +163,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 			pending.resolve(json.body);
 	}
 
-	private async newSession(thread: number) {
+	private async newSession() {
 		let files = new Set<string>();
 		for (let bps of this._breakpoints.values()) {
 			for (let bp of bps) {
@@ -163,45 +171,33 @@ export class QuickJSDebugSession extends SourcemapSession {
 			}
 		}
 		for (let file of files) {
-			await this.sendBreakpointMessage(thread, file);
+			await this.sendBreakpointMessage(file);
 		}
 
-		this.sendThreadMessage(thread, {
+		this.sendThreadMessage({
 			type: 'stopOnException',
 			stopOnException: this._stopOnException,
 		});
 
-		this.sendThreadMessage(thread, { type: 'continue' })
+		this.sendThreadMessage({ type: 'continue' });
 	}
-
-	private onThreadDead(thread: number, reason: string) {
-		if (thread) {
-			thread = 0;
-			var socket = this._threads.get(thread);
-			this._threads.delete(thread);
-			if (!this._server)
-				this._terminated(reason);
-			if (socket)
-				socket.destroy();
-		}
-	}
-
 
 	private onSocket(socket: Socket) {
-		var parser = new MessageParser();
-		var thread: number = 0;
-		parser.on('message', json => {
-			this.logTrace(`received ${thread}: ${JSON.stringify(json)}`)
-			// the very first message must include the thread id.
-			if (!thread) {
-				thread = json.event.thread;
-				this._threads.set(thread, socket);
-				this.newSession(thread);
-				this.sendEvent(new ThreadEvent("new", thread));
-				this.emit('quickjs-thread');
-			}
+		this.closeConnection();
+		this._connection = socket;
+		this.newSession();
 
+		let parser = new MessageParser();
+		parser.on('message', json => {
+			// the very first message will include the thread id, as it will be a stopped event.
 			if (json.type === 'event') {
+				const thread = json.event.thread;
+				if (!this._threads.has(thread)) {
+					this._threads.add(thread);
+					this.sendEvent(new ThreadEvent("new", thread));
+					this.emit('quickjs-thread');
+				}
+				this.logTrace(`received message (thread ${thread}): ${JSON.stringify(json)}`);
 				this.handleEvent(thread, json.event);
 			}
 			else if (json.type === 'response') {
@@ -211,24 +207,19 @@ export class QuickJSDebugSession extends SourcemapSession {
 				this.logTrace(`unknown message ${json.type}`);
 			}
 		});
-		const cleanup = () => {
-			if (thread) {
-				thread = 0;
-				this.onThreadDead(thread, 'socket closed');
-			}
-		}
+
 		socket.pipe(parser as any);
-		socket.on('error', cleanup);
-		socket.on('close', cleanup);
+		socket.on('error', e => this._terminated(e.toString()));
+		socket.on('close', () => this._terminated('close'));
 	}
 
 	protected disconnectRequest(response: DebugProtocol.DisconnectResponse, args: DebugProtocol.DisconnectArguments, request?: DebugProtocol.Request): void {
 		this.closeServer();
-		this.closeSockets();
+		this.closeConnection();
 		this.sendResponse(response);
 	}
 
-    protected async attachRequest(response: DebugProtocol.AttachResponse, args: AttachRequestArguments, request?: DebugProtocol.Request) {
+	protected async attachRequest(response: DebugProtocol.AttachResponse, args: AttachRequestArguments, request?: DebugProtocol.Request) {
 		this._commonArgs = args;
 		this._argsSubject.notify();
 		this.beforeConnection({});
@@ -243,7 +234,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 		this._commonArgs.localRoot = args.localRoot;
 		this.closeServer();
 
-		var env = {};
+		let env = {};
 		try {
 			this.beforeConnection(env);
 		}
@@ -251,7 +242,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 			this.sendErrorResponse(response, 17, e.message);
 			return;
 		}
-		var cwd = <string>args.cwd || path.dirname(args.program);
+		let cwd = <string>args.cwd || path.dirname(args.program);
 
 		if (typeof args.console === 'string') {
 			switch (args.console) {
@@ -326,7 +317,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 		logger.setup(this._commonArgs.trace ? Logger.LogLevel.Verbose : Logger.LogLevel.Stop, false);
 
 		const address = this._commonArgs.address || 'localhost';
-		if (this._commonArgs.mode == 'connect') {
+		if (this._commonArgs.mode === 'connect') {
 			// connect to a quickjs runtime that is instructed to listen for a connection.
 			// typically connect should not be used with launching, because it
 			// needs to wait for quickjs to spin up and listen.
@@ -337,9 +328,12 @@ export class QuickJSDebugSession extends SourcemapSession {
 			env['QUICKJS_DEBUG_LISTEN_ADDRESS'] = `${address}:${this._commonArgs.port}`;
 		}
 		else {
-			this._server = new Server(this.onSocket.bind(this));
+			this._server = new Server(socket => {
+				this.closeServer();
+				this.onSocket(socket);
+			});
 			this._server.listen(this._commonArgs.port || 0);
-			var port = (<AddressInfo>this._server.address()).port;
+			let port = (<AddressInfo>this._server.address()).port;
 			this.log(`QuickJS Debug Port: ${port}`);
 
 			env['QUICKJS_DEBUG_ADDRESS'] = `localhost:${port}`;
@@ -347,16 +341,16 @@ export class QuickJSDebugSession extends SourcemapSession {
 	}
 
 	private async afterConnection() {
-		if (this._commonArgs.mode == 'connect') {
+		if (this._commonArgs.mode === 'connect') {
 
-			var socket;
-			for (var attempt = 0; attempt < 10; attempt++) {
+			let socket: Socket | undefined = undefined;
+			for (let attempt = 0; attempt < 10; attempt++) {
 				try {
 					socket = await new Promise<Socket>((resolve, reject) => {
-						var socket = createConnection(this._commonArgs.port, this._commonArgs.address);
+						let socket = createConnection(this._commonArgs.port, this._commonArgs.address);
 						socket.on('connect', () => {
 							socket.removeAllListeners();
-							resolve(socket)
+							resolve(socket);
 						});
 
 						socket.on('close', reject);
@@ -372,7 +366,6 @@ export class QuickJSDebugSession extends SourcemapSession {
 			if (!socket) {
 				const address = this._commonArgs.address || 'localhost';
 				throw new Error(`Cannot launch connect (${address}:${this._commonArgs.port}).`);
-				return;
 			}
 
 			this.onSocket(socket);
@@ -406,7 +399,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 	private _terminated(reason: string): void {
 		this.log(`Debug Session Ended: ${reason}`);
 		this.closeServer();
-		this.closeSockets()
+		this.closeConnection();
 
 		if (!this._isTerminated) {
 			this._isTerminated = true;
@@ -420,11 +413,11 @@ export class QuickJSDebugSession extends SourcemapSession {
 			this._server = undefined;
 		}
 	}
-	private async closeSockets() {
-		for (var thread of this._threads.values()) {
-			thread.destroy()
-		}
-		this._threads.clear()
+	private async closeConnection() {
+		if (this._connection)
+			this._connection.destroy();
+		this._connection = undefined;
+		this._threads.clear();
 	}
 
 	protected async terminateRequest(response: DebugProtocol.TerminateResponse, args: DebugProtocol.TerminateArguments, request?: DebugProtocol.Request) {
@@ -432,7 +425,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 		this.sendResponse(response);
 	}
 
-	private async sendBreakpointMessage(thread: number, file: string) {
+	private async sendBreakpointMessage(file: string) {
 		const breakpoints: DebugProtocol.SourceBreakpoint[] = [];
 
 		for (let bpList of this._breakpoints.values()) {
@@ -440,7 +433,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 				breakpoints.push({
 					line: bp.line,
 					column: bp.column,
-				})
+				});
 			}
 		}
 		const envelope = {
@@ -449,8 +442,8 @@ export class QuickJSDebugSession extends SourcemapSession {
 				path: file,
 				breakpoints: breakpoints.length ? breakpoints : undefined,
 			},
-		}
-		this.sendThreadMessage(thread, envelope);
+		};
+		this.sendThreadMessage(envelope);
 	}
 
 	protected async setBreakPointsRequest(response: DebugProtocol.SetBreakpointsResponse, args: DebugProtocol.SetBreakpointsArguments) {
@@ -474,15 +467,17 @@ export class QuickJSDebugSession extends SourcemapSession {
 		// map the new breakpoints for a file, and mapped files that get touched.
 		const bps = args.breakpoints || [];
 		const mappedBreakpoints: MappedPosition[] = [];
-		for (var bp of bps) {
-			const mapped = await this.translateFileLocationToRemote({
+		for (let bp of bps) {
+			const mappedPositions = await this.translateFileLocationToRemote({
 				source: args.source.path,
 				column: bp.column || 0,
 				line: bp.line,
 			});
 
-			dirtySources.add(mapped.source);
-			mappedBreakpoints.push(mapped);
+			for (let mapped of mappedPositions) {
+				dirtySources.add(mapped.source);
+				mappedBreakpoints.push(mapped);
+			}
 		}
 
 		// update the entry for this file
@@ -493,12 +488,10 @@ export class QuickJSDebugSession extends SourcemapSession {
 			this._breakpoints.delete(args.source.path);
 		}
 
-		for (let thread of this._threads.keys()) {
-			for (let file of dirtySources) {
-				await this.sendBreakpointMessage(thread, file);
-			}
+		for (let file of dirtySources) {
+			await this.sendBreakpointMessage(file);
 		}
-		this.sendResponse(response);
+	this.sendResponse(response);
 	}
 
 	protected setExceptionBreakPointsRequest(response: DebugProtocol.SetExceptionBreakpointsResponse, args: DebugProtocol.SetExceptionBreakpointsArguments, request?: DebugProtocol.Request) {
@@ -506,25 +499,23 @@ export class QuickJSDebugSession extends SourcemapSession {
 
 		this._stopOnException = args.filters.length > 0;
 
-		for (var thread of this._threads.keys()) {
-			this.sendThreadMessage(thread, {
-				type: 'stopOnException',
-				stopOnException: this._stopOnException,
-			})
-		}
-	}
+		this.sendThreadMessage({
+			type: 'stopOnException',
+			stopOnException: this._stopOnException,
+		});
+}
 
 	protected async threadsRequest(response: DebugProtocol.ThreadsResponse): Promise<void> {
-		if (this._threads.size == 0) {
+		if (this._threads.size === 0) {
 			await new Promise((resolve, reject) => {
 				this.once('quickjs-thread', () => {
 					resolve();
-				})
+				});
 			});
 		}
 		response.body = {
 			threads: Array.from(this._threads.keys()).map(thread => new Thread(thread, `thread 0x${thread.toString(16)}`))
-		}
+		};
 		this.sendResponse(response);
 	}
 
@@ -534,7 +525,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 
 		const stackFrames: StackFrame[] = [];
 		for (const { id, name, filename, line, column } of body) {
-			var mappedId = id + thread;
+			let mappedId = id + thread;
 			this._stackFrames.set(mappedId, thread);
 
 			try {
@@ -572,7 +563,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 		const body = await this.sendThreadRequest(thread, response, args);
 		const scopes = body.map(({ name, reference, expensive }) => {
 			// todo: use counter mapping
-			var mappedReference = reference + thread;
+			let mappedReference = reference + thread;
 			this._variables.set(mappedReference, thread);
 			return new Scope(name, mappedReference, expensive);
 		});
@@ -601,44 +592,43 @@ export class QuickJSDebugSession extends SourcemapSession {
 
 		response.body = {
 			variables,
-		}
+		};
 		this.sendResponse(response);
 	}
 
-	private sendThreadMessage(thread: number, envelope: any) {
-		var socket = this._threads.get(thread);
-		if (!socket) {
-			this.logTrace(`socket not found for thread: ${thread.toString(16)}`);
+	private sendThreadMessage(envelope: any) {
+		if (!this._connection) {
+			this.logTrace(`debug connection not avaiable`);
 			return;
 		}
 
-		this.logTrace(`sent ${thread}: ${JSON.stringify(envelope)}`)
+		this.logTrace(`sent: ${JSON.stringify(envelope)}`);
 
-		var json = JSON.stringify(envelope);
+		let json = JSON.stringify(envelope);
 
-		var jsonBuffer = Buffer.from(json);
+		let jsonBuffer = Buffer.from(json);
 		// length prefix is 8 hex followed by newline = 012345678\n
 		// not efficient, but protocol is then human readable.
 		// json = 1 line json + new line
-		var messageLength = jsonBuffer.byteLength + 1;
-		var length = '00000000' + messageLength.toString(16) + '\n';
+		let messageLength = jsonBuffer.byteLength + 1;
+		let length = '00000000' + messageLength.toString(16) + '\n';
 		length = length.substr(length.length - 9);
-		var lengthBuffer = Buffer.from(length);
-		var newline = Buffer.from('\n');
-		var buffer = Buffer.concat([lengthBuffer, jsonBuffer, newline]);
-		socket.write(buffer);
+		let lengthBuffer = Buffer.from(length);
+		let newline = Buffer.from('\n');
+		let buffer = Buffer.concat([lengthBuffer, jsonBuffer, newline]);
+		this._connection.write(buffer);
 	}
 
 	private sendThreadRequest(thread: number, response: DebugProtocol.Response, args: any): Promise<any> {
 		return new Promise((resolve, reject) => {
-			var request_seq = response.request_seq;
+			let request_seq = response.request_seq;
 			// todo: don't actually need to cache this. can send across wire.
 			this._requests.set(request_seq, {
 				resolve,
 				reject,
 			});
 
-			var envelope = {
+			let envelope = {
 				type: 'request',
 				request: {
 					request_seq,
@@ -647,7 +637,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 				}
 			};
 
-			this.sendThreadMessage(thread, envelope);
+			this.sendThreadMessage(envelope);
 		});
 	}
 
@@ -676,7 +666,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 			this.sendErrorResponse(response, 2030, 'scopesRequest: frameId not specified');
 			return;
 		}
-		var thread = this._stackFrames.get(args.frameId);
+		let thread = this._stackFrames.get(args.frameId);
 		if (!thread) {
 			this.sendErrorResponse(response, 2030, 'scopesRequest: thread not found');
 			return;
@@ -693,7 +683,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 		this.sendResponse(response);
 	}
 
-    protected async pauseRequest(response: DebugProtocol.PauseResponse, args: DebugProtocol.PauseArguments, request?: DebugProtocol.Request) {
+	protected async pauseRequest(response: DebugProtocol.PauseResponse, args: DebugProtocol.PauseArguments, request?: DebugProtocol.Request) {
 		response.body = await this.sendThreadRequest(args.threadId, response, args);
 		this.sendResponse(response);
 	}
@@ -703,26 +693,26 @@ export class QuickJSDebugSession extends SourcemapSession {
 			this.sendErrorResponse(response, 2030, 'completionsRequest: frameId not specified');
 			return;
 		}
-		var thread = this._stackFrames.get(args.frameId);
+		let thread = this._stackFrames.get(args.frameId);
 		if (!thread) {
 			this.sendErrorResponse(response, 2030, 'completionsRequest: thread not found');
 			return;
 		}
 		args.frameId -= thread;
 
-		var expression = args.text.substr(0, args.text.length - 1);
+		let expression = args.text.substr(0, args.text.length - 1);
 		if (!expression) {
-			this.sendErrorResponse(response, 2032, "no completion available for empty string")
+			this.sendErrorResponse(response, 2032, "no completion available for empty string");
 			return;
 		}
 
 		const evaluateArgs: DebugProtocol.EvaluateArguments = {
 			frameId: args.frameId,
 			expression,
-		}
+		};
 		response.command = 'evaluate';
 
-		var body = await this.sendThreadRequest(thread, response, evaluateArgs);
+		let body = await this.sendThreadRequest(thread, response, evaluateArgs);
 		if (!body.variablesReference) {
 			this.sendErrorResponse(response, 2032, "no completion available for expression");
 			return;
@@ -735,7 +725,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 
 		const variableArgs: DebugProtocol.VariablesArguments = {
 			variablesReference: body.variablesReference,
-		}
+		};
 		response.command = 'variables';
 		body = await this.sendThreadRequest(thread, response, variableArgs);
 
@@ -745,7 +735,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 				label: property.name,
 				type: 'field',
 			}))
-		}
+		};
 
 		this.sendResponse(response);
 	}
