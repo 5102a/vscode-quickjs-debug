@@ -41,7 +41,7 @@
 		"await-notify": "1.0.1",
 		"source-map": "^0.7.3",
 		"stream-parser": "^0.3.1",
-		"vscode-debugadapter": "1.37.0"
+		"vscode-debugadapter": "^1.41.1"
 	},
 	"devDependencies": {
 		"@types/node": "10.12.12",
