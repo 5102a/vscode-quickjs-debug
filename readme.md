@@ -40,7 +40,7 @@ Alternatively, provide one of the following environment variables before startin
 
 Using these methods will block execution until the debugger has attached.
 
-QuickJS does not provide an event loop, so the debugger should (optionally, but recommended) be periodically called from your event loop to check for messages. This can be done with:
+QuickJS does not provide an event loop, so the debugger should (optionally, but recommended) be periodically called from your event loop to check for messages. Otherwise, debugger messages may go unhandled until the next time Javascript is invoked. This can be done with:
 
 ```c
 void js_debugger_cooperate(JSContext *ctx);
