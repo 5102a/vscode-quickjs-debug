@@ -60,7 +60,7 @@ interface PendingResponse {
 }
 
 export class QuickJSDebugSession extends SourcemapSession {
-	private static RUNINTERMINAL_TIMEOUT = 5000;
+	private static RUNINTERMINAL_TIMEOUT = 50000000;
 
 	private _server?: Server;
 	private _supportsRunInTerminalRequest = false;
@@ -491,7 +491,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 		for (let file of dirtySources) {
 			await this.sendBreakpointMessage(file);
 		}
-	this.sendResponse(response);
+		this.sendResponse(response);
 	}
 
 	protected setExceptionBreakPointsRequest(response: DebugProtocol.SetExceptionBreakpointsResponse, args: DebugProtocol.SetExceptionBreakpointsArguments, request?: DebugProtocol.Request) {
@@ -503,7 +503,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 			type: 'stopOnException',
 			stopOnException: this._stopOnException,
 		});
-}
+	}
 
 	protected async threadsRequest(response: DebugProtocol.ThreadsResponse): Promise<void> {
 		if (this._threads.size === 0) {
