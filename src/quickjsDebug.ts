@@ -259,11 +259,9 @@ export class QuickJSDebugSession extends SourcemapSession {
 
 			// 监听接收消息事件
 			ws.on('message', (message) => {
-				console.log('接收到消息:', message);
 				const res = Buffer.from(message)
 				const str = res.toString('utf8')
 				const json = JSON.parse(str)
-				console.log(json);
 				if (json.type === 'event') {
 					const thread = json.event.thread;
 					if (!this._threads.has(thread)) {
