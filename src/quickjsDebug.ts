@@ -10,7 +10,8 @@ const path = require('path');
 const Parser = require('stream-parser');
 const Transform = require('stream').Transform;
 const { Subject } = require('await-notify');
-
+const WebSocket = require('ws');
+import * as vscode from 'vscode';
 interface CommonArguments extends SourcemapArguments {
 	program: string;
 	args?: string[];
@@ -85,6 +86,8 @@ export class QuickJSDebugSession extends SourcemapSession {
 	private _argsReady = (async () => {
 		await this._argsSubject.wait();
 	})();
+
+	ws: WebSocket
 
 	public constructor() {
 		super("quickjs-debug.txt");
@@ -232,81 +235,63 @@ export class QuickJSDebugSession extends SourcemapSession {
 		this._argsSubject.notify();
 
 		this._commonArgs.localRoot = args.localRoot;
-		this.closeServer();
 
 		let env = {};
-		try {
-			this.beforeConnection(env);
-		}
-		catch (e) {
-			this.sendErrorResponse(response, 17, e.message);
-			return;
-		}
-		let cwd = <string>args.cwd || path.dirname(args.program);
 
-		if (typeof args.console === 'string') {
-			switch (args.console) {
-				case 'internalConsole':
-				case 'integratedTerminal':
-				case 'externalTerminal':
-					this._console = args.console;
-					break;
-				default:
-					this.sendErrorResponse(response, 2028, `Unknown console type '${args.console}'.`);
-					return;
-			}
-		}
+		let cwd = <string>args.cwd || path.dirname(args.program);
 
 		let qjsArgs = (args.args || []).slice();
 		qjsArgs.unshift(args.program);
+		this.newSession();
+		const wss = new WebSocket.Server({ port: 8091 });
 
-		if (this._supportsRunInTerminalRequest && (this._console === 'externalTerminal' || this._console === 'integratedTerminal')) {
+		const document = await vscode.workspace.openTextDocument(args.program);
+		const code = document.getText();
+		// 监听连接事件
+		wss.on('connection', (ws) => {
+			this.ws = ws
+			console.log('客户端已连接');
+			ws.send(JSON.stringify({
+				type: 'eval',
+				payload: code
+			}))
+			this.newSession();
 
-			const termArgs: DebugProtocol.RunInTerminalRequestArguments = {
-				kind: this._console === 'integratedTerminal' ? 'integrated' : 'external',
-				title: "QuickJS Debug Console",
-				cwd,
-				args: qjsArgs,
-				env,
-			};
-
-			this.runInTerminalRequest(termArgs, QuickJSDebugSession.RUNINTERMINAL_TIMEOUT, runResponse => {
-				if (runResponse.success) {
-					// this._attach(response, args, port, address, timeout);
-				} else {
-					this.sendErrorResponse(response, 2011, `Cannot launch debug target in terminal (${runResponse.message}).`);
-					// this._terminated('terminal error: ' + runResponse.message);
+			// 监听接收消息事件
+			ws.on('message', (message) => {
+				console.log('接收到消息:', message);
+				const res = Buffer.from(message)
+				const str = res.toString('utf8')
+				const json = JSON.parse(str)
+				console.log(json);
+				if (json.type === 'event') {
+					const thread = json.event.thread;
+					if (!this._threads.has(thread)) {
+						this._threads.add(thread);
+						this.sendEvent(new ThreadEvent("new", thread));
+						this.emit('quickjs-thread');
+					}
+					this.handleEvent(thread, json.event);
+					console.log(' json.event', json.event);
 				}
-			});
-		} else {
-			const options: CP.SpawnOptions = {
-				cwd,
-				env,
-			};
-
-			const nodeProcess = CP.spawn(args.runtimeExecutable, qjsArgs, options);
-			nodeProcess.on('error', (error) => {
-				// tslint:disable-next-line:no-bitwise
-				this.sendErrorResponse(response, 2017, `Cannot launch debug target (${error.message}).`);
-				this._terminated(`failed to launch target (${error})`);
-			});
-			nodeProcess.on('exit', () => {
-				this._terminated('target exited');
-			});
-			nodeProcess.on('close', (code) => {
-				this._terminated('target closed');
+				else if (json.type === 'response') {
+					console.log('response', json);
+					this.handleResponse(json);
+				} else {
+					console.log('else');
+				}
+				// 发送消息给客户端
 			});
 
-			this._captureOutput(nodeProcess);
-		}
+			ws.on('error', (error) => {
+				console.log(error)
+			})
 
-		try {
-			this.afterConnection();
-		}
-		catch (e) {
-			this.sendErrorResponse(response, 18, e.message);
-			return;
-		}
+			// 监听关闭连接事件
+			ws.on('close', () => {
+				console.log('客户端已断开连接');
+			});
+		});
 
 		this.sendResponse(response);
 	}
@@ -597,7 +582,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 	}
 
 	private sendThreadMessage(envelope: any) {
-		if (!this._connection) {
+		if (!this.ws) {
 			this.logTrace(`debug connection not avaiable`);
 			return;
 		}
@@ -606,17 +591,18 @@ export class QuickJSDebugSession extends SourcemapSession {
 
 		let json = JSON.stringify(envelope);
 
+		console.log('envelope', envelope);
+
 		let jsonBuffer = Buffer.from(json);
-		// length prefix is 8 hex followed by newline = 012345678\n
 		// not efficient, but protocol is then human readable.
 		// json = 1 line json + new line
 		let messageLength = jsonBuffer.byteLength + 1;
 		let length = '00000000' + messageLength.toString(16) + '\n';
 		length = length.substr(length.length - 9);
-		let lengthBuffer = Buffer.from(length);
-		let newline = Buffer.from('\n');
-		let buffer = Buffer.concat([lengthBuffer, jsonBuffer, newline]);
-		this._connection.write(buffer);
+		this.ws.send(JSON.stringify({
+			type: 'info',
+			payload: length + json + '\n'
+		}));
 	}
 
 	private sendThreadRequest(thread: number, response: DebugProtocol.Response, args: any): Promise<any> {
