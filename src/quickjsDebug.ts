@@ -242,7 +242,6 @@ export class QuickJSDebugSession extends SourcemapSession {
 
 		let qjsArgs = (args.args || []).slice();
 		qjsArgs.unshift(args.program);
-		this.newSession();
 		const wss = new WebSocket.Server({ port: 8091 });
 
 		const document = await vscode.workspace.openTextDocument(args.program);
@@ -256,6 +255,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 				payload: code
 			}))
 			this.newSession();
+			this.sendResponse(response);
 
 			// 监听接收消息事件
 			ws.on('message', (message) => {
@@ -291,7 +291,6 @@ export class QuickJSDebugSession extends SourcemapSession {
 			});
 		});
 
-		this.sendResponse(response);
 	}
 
 
