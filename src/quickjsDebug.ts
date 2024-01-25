@@ -249,7 +249,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 		// 监听连接事件
 		wss.on('connection', (ws) => {
 			this.ws = ws
-			console.log('客户端已连接');
+			console.log('客户端已连接', code, code.length);
 			ws.send(JSON.stringify({
 				type: 'eval',
 				payload: code
@@ -262,6 +262,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 				const res = Buffer.from(message)
 				const str = res.toString('utf8')
 				const json = JSON.parse(str)
+				console.log('rrrr', str);
 				if (json.type === 'event') {
 					const thread = json.event.thread;
 					if (!this._threads.has(thread)) {
@@ -270,10 +271,8 @@ export class QuickJSDebugSession extends SourcemapSession {
 						this.emit('quickjs-thread');
 					}
 					this.handleEvent(thread, json.event);
-					console.log(' json.event', json.event);
 				}
 				else if (json.type === 'response') {
-					console.log('response', json);
 					this.handleResponse(json);
 				} else {
 					console.log('else');
@@ -588,7 +587,7 @@ export class QuickJSDebugSession extends SourcemapSession {
 
 		let json = JSON.stringify(envelope);
 
-		console.log('envelope', envelope);
+		console.log('envelope', json);
 
 		let jsonBuffer = Buffer.from(json);
 		// not efficient, but protocol is then human readable.
